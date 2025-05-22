@@ -23,6 +23,10 @@ __version__ = "0.1.0"
 __author__ = "Yusuke Watanabe"
 __email__ = "ywatanabe@alumni.u-tokyo.ac.jp"
 
-# Package imports will be added as modules are developed
+# Package imports
+from .text_processor import TextProcessor
+from .search_engine import SearchEngine
+
+__all__ = ['TextProcessor', 'SearchEngine']
 
 # EOF
