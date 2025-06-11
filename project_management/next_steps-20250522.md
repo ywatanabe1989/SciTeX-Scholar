@@ -1,4 +1,4 @@
-# SciTeX-Search Development Roadmap & Next Steps
+# SciTeX-Scholar Development Roadmap & Next Steps
 
 **Date**: May 22, 2025  
 **Current Status**: Foundation Complete  
@@ -18,7 +18,7 @@
 **Implementation Approach**:
 - Follow TDD methodology established in foundation
 - Create `tests/test_latex_parser.py` first
-- Implement `src/scitex_search/latex_parser.py`
+- Implement `src/scitex_scholar/latex_parser.py`
 - Integrate with existing TextProcessor
 
 **Acceptance Criteria**:

@@ -4,9 +4,9 @@
 # File: tests/__init__.py
 
 """
-Test package for SciTeX-Search.
+Test package for SciTeX-Scholar.
 
-This package contains all test modules for the SciTeX-Search package.
+This package contains all test modules for the SciTeX-Scholar package.
 Tests follow TDD principles and are organized to mirror the source structure.
 """
 

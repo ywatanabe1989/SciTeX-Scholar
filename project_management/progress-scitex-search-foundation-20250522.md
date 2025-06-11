@@ -1,8 +1,8 @@
-# SciTeX-Search Foundation Development Progress Report
+# SciTeX-Scholar Foundation Development Progress Report
 
 | Type | Stat | Description                                    |
 |------|------|------------------------------------------------|
-| 🚀   | [x]  | SciTeX-Search: Scientific Text Search Package |
+| 🚀   | [x]  | SciTeX-Scholar: Scientific Text Search Package |
 
 ## Project Overview
 **Purpose**: A Python package for scientific text search and analysis, particularly focused on LaTeX documents and research papers.
@@ -21,10 +21,10 @@
 |      |      | 📌 Essential for distribution and professional development        |
 |------|------|--------------------------------------------------------------------|
 | 🏁   | [x]  | Package Structure Setup                                            |
-|      | [J]  | 📌 `./src/scitex_search/`, `./tests/`, `pyproject.toml`          |
+|      | [J]  | 📌 `./src/scitex_scholar/`, `./tests/`, `pyproject.toml`          |
 |------|------|--------------------------------------------------------------------|
-| 📋   | [x]  | Created src/scitex_search package directory                       |
-|      | [J]  | 📌 `./src/scitex_search/__init__.py`                             |
+| 📋   | [x]  | Created src/scitex_scholar package directory                       |
+|      | [J]  | 📌 `./src/scitex_scholar/__init__.py`                             |
 | 📋   | [x]  | Implemented pyproject.toml for modern Python packaging            |
 |      | [J]  | 📌 `./pyproject.toml`                                            |
 | 📋   | [x]  | Created comprehensive .gitignore                                   |
@@ -39,7 +39,7 @@
 |      |      | 📌 Foundation for all search and analysis features                |
 |------|------|--------------------------------------------------------------------|
 | 🏁   | [x]  | TextProcessor Module Complete                                      |
-|      | [J]  | 📌 `./src/scitex_search/text_processor.py`                       |
+|      | [J]  | 📌 `./src/scitex_scholar/text_processor.py`                       |
 |------|------|--------------------------------------------------------------------|
 | 📋   | [x]  | Text cleaning and normalization                                    |
 |      | [J]  | 📌 Handles whitespace, case normalization for scientific content  |
@@ -57,7 +57,7 @@
 |      |      | 📌 Core functionality for scientific document retrieval           |
 |------|------|--------------------------------------------------------------------|
 | 🏁   | [x]  | SearchEngine Module Complete                                       |
-|      | [J]  | 📌 `./src/scitex_search/search_engine.py`                        |
+|      | [J]  | 📌 `./src/scitex_scholar/search_engine.py`                        |
 |------|------|--------------------------------------------------------------------|
 | 📋   | [x]  | Document indexing with inverted index                             |
 |      | [J]  | 📌 Efficient storage and retrieval mechanism                      |
@@ -169,8 +169,8 @@
 
 ### 📁 **Project Structure**:
 ```
-SciTeX-Search/
-├── src/scitex_search/          # Main package
+SciTeX-Scholar/
+├── src/scitex_scholar/          # Main package
 │   ├── __init__.py            # Package exports
 │   ├── text_processor.py     # Scientific text processing
 │   └── search_engine.py      # Document search and indexing
@@ -228,7 +228,7 @@ SciTeX-Search/
 
 ## Conclusion
 
-The SciTeX-Search project has successfully established a **solid, production-ready foundation** with:
+The SciTeX-Scholar project has successfully established a **solid, production-ready foundation** with:
 - ✅ **Complete core functionality** for scientific text processing and search
 - ✅ **Professional development practices** following TDD and clean code principles  
 - ✅ **Comprehensive testing framework** ensuring reliability and quality
