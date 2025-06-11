@@ -125,7 +125,7 @@ Role: Project Renaming and PyPI Preparation
 Status: completed
 Task: Rename project to scitex-scholar and prepare for PyPI distribution
 Notes:
-- Successfully renamed from SciTeX-Search to SciTeX-Scholar
+- Successfully renamed from SciTeX-Scholar to SciTeX-Scholar
 - Updated 57 files with new naming
 - Renamed directories: tests/scitex_search → tests/scitex_scholar
 - Renamed directories: examples/scitex_search → examples/scitex_scholar
