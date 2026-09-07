@@ -21,7 +21,7 @@
 #      `pytest-matrix` legs, so `sphinx` was never required and cannot strand.
 #      DO NOT COPY THAT CONCLUSION TO ANOTHER REPO — it is a per-repo, per-branch
 #      fact that lives only behind the branch-protection API.)
-#   4. delete the legacy file and its PS-231 exemption TOGETHER  <- THIS PR
+#   4. delete the legacy file and its PS-231 exemption TOGETHER  (PR #147)
 #
 # WHY THE PUBLISH HALF IS A SEPARATE JOB HERE RATHER THAN IN THE CALLEE
 # ---------------------------------------------------------------------------
@@ -41,6 +41,19 @@
 # unpack, and grep the vendored bundle for the changed string. A repo-side
 # pass proves only that the artifact landed — the release build is a
 # DIFFERENT RUN and may not have picked it up.
+#
+# THAT ONE TEST CARRIES THREE CLAIMS, and it is the only thing that
+# discriminates all three. Written down because a test whose value is
+# invisible is the first thing dropped when someone trims a slow pipeline:
+#   1. the RELEASE build ships the docs        (repo-side checks cannot see this)
+#   2. the refresh WRITES WHERE the commit step READS   (a wrong path is silent)
+#   3. the artifact is the one from THIS RUN   (a stale but WELL-FORMED artifact
+#      passes every assertion below: non-empty source, non-empty destination,
+#      matching counts, byte-identical content, zero commit — nothing
+#      malformed happened, the docs are simply not the new docs)
+# A string that did not exist when a stale artifact was built cannot appear in
+# it, which is why only this test separates (3) from success.
+# (Cases 2 and 3 raised by figrecipe, 2026-09-07.)
 
 name: docs-caller
 
@@ -88,20 +101,69 @@ jobs:
           name: sphinx-html
           path: .sphinx-html-artifact
 
-      - name: Refresh src/scitex_scholar/_sphinx_html/ from the artifact
+      - name: Refresh the vendored bundle, and ASSERT WHAT WAS DONE
+        # WHY THE COUNTS AND THE HARD FAILURES BELOW.
+        #
+        # The commit step that follows only commits IF THE BUNDLE CHANGED, so
+        # "no commit" has two causes and only one of them is good:
+        #   GOOD    the rebuilt docs are byte-identical to what is vendored
+        #   BROKEN  this step never wrote where the commit step reads
+        #           (an empty artifact, or a path that stopped matching)
+        # Both are SILENT, and the second freezes users' in-wheel documentation
+        # with every check green — the exact failure this whole conversion was
+        # careful about.
+        #
+        # Counting both sides and failing loudly on zero collapses that
+        # ambiguity: after this step, "no commit" can ONLY mean identical
+        # content, because the other causes are now red builds.
+        #
+        # Gap identified by figrecipe, 2026-09-07: my original reasoning
+        # ("an empty artifact would produce a huge deletion diff, so silence
+        # proves the artifact was right") excluded an empty ARTIFACT but NOT a
+        # wrong PATH — which produces the same silence for the opposite reason.
+        #
+        # WHAT THESE ASSERTIONS DO NOT COVER, stated so nobody mistakes them
+        # for a complete gate: a STALE BUT WELL-FORMED artifact passes all of
+        # them, correctly, because nothing malformed happened. That case is
+        # upstream of this step and no assertion inside it can see it. The
+        # download below passes only `name` and `path` — no `run-id`, no
+        # `github-token` — which on actions/download-artifact@v4 scopes the
+        # lookup to the CURRENT run; that is a reading of the action's
+        # semantics, not something measured here. The docs-line-change test
+        # in the header is what actually discriminates it.
         run: |
           set -euo pipefail
-          rm -rf src/scitex_scholar/_sphinx_html
-          mkdir -p src/scitex_scholar/_sphinx_html
-          cp -rf .sphinx-html-artifact/. src/scitex_scholar/_sphinx_html/
+          vendored=src/scitex_scholar/_sphinx_html
+
+          downloaded=$(find .sphinx-html-artifact -type f | wc -l)
+          echo "artifact files downloaded: ${downloaded}"
+          if [ "${downloaded}" -eq 0 ]; then
+            echo "::error::the sphinx-html artifact is empty - nothing to vendor" >&2
+            exit 1
+          fi
+
+          before=$(find "${vendored}" -type f 2>/dev/null | wc -l || true)
+          echo "vendored files before: ${before}"
+
+          rm -rf "${vendored}"
+          mkdir -p "${vendored}"
+          cp -rf .sphinx-html-artifact/. "${vendored}"/
           rm -rf .sphinx-html-artifact
+
           # sphinx-build writes its internal cache to <outdir>/.doctrees, so a
           # whole-directory copy drags it in. It is never served, it is many
           # megabytes of pickles, and it embeds a verbatim mirror of CPython's
           # documentation inventory -- which reintroduces retired-engine
           # vocabulary into the tree on every build. Drop it.
-          rm -rf src/scitex_scholar/_sphinx_html/.doctrees
-          touch src/scitex_scholar/_sphinx_html/.nojekyll
+          rm -rf "${vendored}"/.doctrees
+          touch "${vendored}"/.nojekyll
+
+          after=$(find "${vendored}" -type f | wc -l)
+          echo "vendored files after: ${after}"
+          if [ "${after}" -eq 0 ]; then
+            echo "::error::${vendored} is empty after the refresh - the copy wrote nowhere" >&2
+            exit 1
+          fi
 
       - name: Commit refreshed HTML if it changed
         continue-on-error: true
@@ -113,6 +175,8 @@ jobs:
             git add src/scitex_scholar/_sphinx_html
             git commit -m "docs(sphinx_html): refresh from CI build"
             git push
+          else
+            echo "vendored bundle unchanged - nothing to commit"
           fi
 
 # EOF
