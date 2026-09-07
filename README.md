@@ -16,7 +16,7 @@
 <p align="center">
   <a href="https://pypi.org/project/scitex-scholar/"><img src="https://img.shields.io/pypi/v/scitex-scholar?label=pypi" alt="pypi"></a>
   <a href="https://pypi.org/project/scitex-scholar/"><img src="https://img.shields.io/pypi/pyversions/scitex-scholar?label=python" alt="python"></a>
-  <a href="https://github.com/scitex-ai/scitex-scholar/actions/workflows/rtd-sphinx-build-on-ubuntu-latest.yml"><img src="https://img.shields.io/github/actions/workflow/status/scitex-ai/scitex-scholar/rtd-sphinx-build-on-ubuntu-latest.yml?branch=develop&label=docs" alt="docs"></a>
+  <a href="https://github.com/scitex-ai/scitex-scholar/actions/workflows/rtd-sphinx-build-caller.yml"><img src="https://img.shields.io/github/actions/workflow/status/scitex-ai/scitex-scholar/rtd-sphinx-build-caller.yml?branch=develop&label=docs" alt="docs"></a>
 </p>
 <p align="center">
   <a href="https://github.com/scitex-ai/scitex-scholar/actions/workflows/pytest-matrix-on-ubuntu-py3-11-3-12-3-13.yml"><img src="https://img.shields.io/github/actions/workflow/status/scitex-ai/scitex-scholar/pytest-matrix-on-ubuntu-py3-11-3-12-3-13.yml?branch=develop&label=tests" alt="tests"></a>

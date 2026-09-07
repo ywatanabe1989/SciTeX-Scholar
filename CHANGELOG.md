@@ -8,6 +8,23 @@ this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ## [Unreleased]
 
 ### Changed
+- **The docs workflow now CALLS the org reusable `rtd-sphinx-build` instead of
+  re-implementing it**, retiring the PS-231 §1 exemption that had stood since
+  2026-08-18. The exemption's own stated blocker — org-side `fail_on_warning`,
+  `python_version` and `upload_artifact` inputs — was resolved by
+  scitex-ai/.github#41. Behaviour is preserved deliberately: Python 3.11 (what
+  `.readthedocs.yaml` pins), `-W` on pull requests only, the loop-breaker that
+  skips the bot's own docs auto-commit, and the vendor-and-commit of
+  `src/scitex_scholar/_sphinx_html/` — which stays in THIS repo, under its own
+  `contents: write`, because that bundle ships inside the wheel.
+
+### Removed
+- `.github/workflows/rtd-sphinx-build-on-ubuntu-latest.yml`, its PS-231
+  exemption, and two PS-224 exemptions whose paths no longer existed (one had
+  been stale independently of this change). An exemption whose path cannot
+  match is dead config.
+
+### Changed
 - **The citation graph's 503 now says what to do about it.** All four
   `/api/graph/*` routes answered `{"error": "CrossRef API not configured"}` —
   the right status with half an answer, leaving a first-time user with no next
