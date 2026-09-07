@@ -7,6 +7,19 @@ this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.11.0] - 2026-09-07
+
+### Added
+- **`scitex_scholar._django.views` refuses to import when the app is not in
+  the host's `INSTALLED_APPS`**, raising `ImproperlyConfigured` that names the
+  entry to add (`scitex_scholar._django.apps.ScholarEditorConfig`). On
+  2026-09-05 prod mounted the views without the app, Django's template loader
+  could not see `scholar/scholar.html`, and every logged-in request answered
+  500 while anonymous probes were redirected to login and saw nothing. The
+  refusal fires where the host's urlconf and `manage.py check` import the
+  module. It is silent when the app registry is not yet ready (an early
+  importer is unknown, not misconfigured).
+
 ### Changed
 - **The docs workflow now CALLS the org reusable `rtd-sphinx-build` instead of
   re-implementing it**, retiring the PS-231 §1 exemption that had stood since
@@ -18,13 +31,6 @@ this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `src/scitex_scholar/_sphinx_html/` — which stays in THIS repo, under its own
   `contents: write`, because that bundle ships inside the wheel.
 
-### Removed
-- `.github/workflows/rtd-sphinx-build-on-ubuntu-latest.yml`, its PS-231
-  exemption, and two PS-224 exemptions whose paths no longer existed (one had
-  been stale independently of this change). An exemption whose path cannot
-  match is dead config.
-
-### Changed
 - **The citation graph's 503 now says what to do about it.** All four
   `/api/graph/*` routes answered `{"error": "CrossRef API not configured"}` —
   the right status with half an answer, leaving a first-time user with no next
@@ -36,18 +42,6 @@ this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   explanations; `graph_health` keeps its `status` field and every route keeps
   503.
 
-### Fixed
-- **The skills-quality gate had been skipping since 2026-05-01 and is now
-  executed.** `tests/skills/test_skills_quality.py` passed `parents[1]` as the
-  package root; that named the repository root while the file sat at
-  `tests/`, and named `tests/` after it moved to `tests/skills/` (c978ba3).
-  The scitex-dev helper answers an empty corpus with a lone `pytest.skip()`,
-  and pytest exits 0 when everything skips, so the check reported success
-  without grading anything for four months. The root is now found by walking
-  up to `pyproject.toml`, and a new test FAILS (rather than skips) when the
-  skill corpus cannot be found, so a future move goes red instead of quiet.
-
-### Changed
 - **The citation graph and the standalone GUI now read the crossref-local
   endpoint from `SCITEX_SCHOLAR_CROSSREF_API_URL`**, the variable the metadata
   engine, `config/default.yaml` and the documented env table already used for
@@ -64,6 +58,12 @@ this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   env-var name hub already exports for the same endpoint, so host and leaf
   agree on one name. The standalone settings module defines only the new name.
 
+- **`_server.py` imports `hosts_to_allow` from scitex-app (`>=0.11.0`)** instead of
+  carrying its own copy. Scholar wrote the first implementation (#137); it was
+  copied verbatim into scitex-app and became the fleet's single one, with a
+  public name from 0.11.0. The private copy and its five behaviour tests are
+  gone; what remains here is the wiring.
+
 ### Deprecated
 - **`SCITEX_SCHOLAR_CROSSREF_LOCAL_API_URL`** (and the older
   `CROSSREF_LOCAL_API_URL`), still read when `SCITEX_SCHOLAR_CROSSREF_API_URL`
@@ -74,25 +74,23 @@ this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   and removed in 1.12.0. Set both during the window if you must support both
   releases; the namespaced name wins when both are present.
 
-### Added
-- **`scitex_scholar._django.views` refuses to import when the app is not in
-  the host's `INSTALLED_APPS`**, raising `ImproperlyConfigured` that names the
-  entry to add (`scitex_scholar._django.apps.ScholarEditorConfig`). On
-  2026-09-05 prod mounted the views without the app, Django's template loader
-  could not see `scholar/scholar.html`, and every logged-in request answered
-  500 while anonymous probes were redirected to login and saw nothing. The
-  refusal fires where the host's urlconf and `manage.py check` import the
-  module. It is silent when the app registry is not yet ready (an early
-  importer is unknown, not misconfigured).
-
-### Changed
-- **`_server.py` imports `hosts_to_allow` from scitex-app (`>=0.11.0`)** instead of
-  carrying its own copy. Scholar wrote the first implementation (#137); it was
-  copied verbatim into scitex-app and became the fleet's single one, with a
-  public name from 0.11.0. The private copy and its five behaviour tests are
-  gone; what remains here is the wiring.
+### Fixed
+- **The skills-quality gate had been skipping since 2026-05-01 and is now
+  executed.** `tests/skills/test_skills_quality.py` passed `parents[1]` as the
+  package root; that named the repository root while the file sat at
+  `tests/`, and named `tests/` after it moved to `tests/skills/` (c978ba3).
+  The scitex-dev helper answers an empty corpus with a lone `pytest.skip()`,
+  and pytest exits 0 when everything skips, so the check reported success
+  without grading anything for four months. The root is now found by walking
+  up to `pyproject.toml`, and a new test FAILS (rather than skips) when the
+  skill corpus cannot be found, so a future move goes red instead of quiet.
 
 ### Removed
+- `.github/workflows/rtd-sphinx-build-on-ubuntu-latest.yml`, its PS-231
+  exemption, and two PS-224 exemptions whose paths no longer existed (one had
+  been stale independently of this change). An exemption whose path cannot
+  match is dead config.
+
 - **The bare-Django fallback in `scitex-scholar gui serve`.** When scitex-app
   was unimportable the launcher printed a note and ran plain `runserver` with
   no workspace shell. With the ALLOWED_HOSTS derivation now living in scitex-app
