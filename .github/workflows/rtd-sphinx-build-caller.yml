@@ -1,0 +1,76 @@
+# Calls the org reusable `rtd-sphinx-build` instead of re-implementing it.
+#
+# WHY THIS FILE EXISTS ALONGSIDE `rtd-sphinx-build-on-ubuntu-latest.yml`
+# RATHER THAN REPLACING IT
+# ---------------------------------------------------------------------------
+# PS-231 §1 flagged the legacy workflow as re-implementing this reusable. The
+# finding was always TRUE; the remedy was unavailable until scitex-ai/.github#41
+# (merged 2026-09-06, 1071f1b7) added the three inputs the exemption named:
+# `fail_on_warning`, `python_version` and `upload_artifact`.
+#
+# The conversion is being done in the order the callee's own header prescribes,
+# because a one-shot swap can strand a required status context on a name no
+# workflow will ever publish again:
+#
+#   1. add this caller ALONGSIDE the legacy workflow          <- THIS PR
+#   2. read the check names GitHub actually publishes, from a throwaway PR
+#   3. move any required contexts while BOTH sets publish
+#   4. only then delete the legacy file and its PS-231 exemption, together
+#
+# Scholar has more slack than most leaves — measured on both protected
+# branches, the ONLY required contexts here are the three `pytest-matrix` legs,
+# so `sphinx` is not required and cannot be stranded. The order is followed
+# anyway rather than leaning on that slack, because the next reader of this
+# file may be in a repo where it is not true.
+#
+# THIS STEP DELIBERATELY DOES NOT VENDOR OR COMMIT ANYTHING.
+# The legacy workflow still owns the publish half (refreshing
+# `src/scitex_scholar/_sphinx_html/` and committing it back) until step 4.
+# Two workflows committing the same directory on the same push would race, and
+# a race that only appears under concurrent pushes is exactly the kind of
+# defect that does not show up in the PR that introduces it. So this file
+# builds and uploads the artifact only; the vendoring moves here in one change
+# with the legacy deletion, when there is exactly one committer at all times.
+#
+# WHAT MUST BE VERIFIED BEFORE STEP 4, and it is not a green run:
+# `_sphinx_html/` ships INSIDE THE WHEEL (hatch packages `src/scitex_scholar`
+# wholesale), so the failure mode of a botched conversion is FROZEN USER-FACING
+# DOCUMENTATION with CI green and nothing saying so. The check is content, and
+# it is on the SHIPPED artifact rather than the repo: change a docs source
+# line, let the pipeline run, `pip download scitex-scholar==<version>` into a
+# clean directory, unpack, and grep the vendored bundle for the changed string.
+# A repo-side pass proves only that the artifact landed, not that the release
+# build picked it up — those are different runs.
+
+name: docs-caller
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+
+jobs:
+  sphinx-via-org-reusable:
+    # Same loop-breaker as the legacy workflow: skip when HEAD is the bot's own
+    # docs auto-commit. `[skip ci]` is not used because it would also suppress
+    # the tag-push and release workflows when that auto-commit happens to be the
+    # most recent commit on develop at release time.
+    if: "!contains(github.event.head_commit.message, 'docs(sphinx_html): refresh from CI build')"
+    uses: scitex-ai/.github/.github/workflows/rtd-sphinx-build.yml@main
+    with:
+      # .readthedocs.yaml pins build.tools.python 3.11; the callee's default is
+      # 3.12, so CI would otherwise build the docs on a different interpreter
+      # than RTD does. Passing it explicitly keeps the two in step.
+      python_version: "3.11"
+      # The legacy workflow passes `-W` on PULL REQUESTS ONLY: warnings block a
+      # PR, but must not fail a push to develop, where the same warning would
+      # stop the vendored bundle from being refreshed at all.
+      fail_on_warning: ${{ github.event_name == 'pull_request' }}
+      # The publish half needs the built HTML in a later job under this repo's
+      # own `contents: write`. Uploading it now — even though step 4 is what
+      # consumes it — means the artifact path is exercised by every run from
+      # here on, so a break in it surfaces before anything depends on it.
+      upload_artifact: true
+      artifact_name: sphinx-html
+
+# EOF
