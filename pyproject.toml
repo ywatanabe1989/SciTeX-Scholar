@@ -178,7 +178,7 @@ docs = [
 # adding a new public extra without adding it here is the violation.
 # `[dev]` and `[docs]` are public here -- CI installs `.[all,dev]`
 # (.github/ci/run-in-sif.sh) and RTD installs `.[docs]`
-# (.github/workflows/rtd-sphinx-build-on-ubuntu-latest.yml) by those
+# (.github/workflows/rtd-sphinx-build-caller.yml) by those
 # exact names -- so they are listed too, matching how scitex-dev,
 # scitex-logging, and scitex-session close their own `all`.
 all = [
