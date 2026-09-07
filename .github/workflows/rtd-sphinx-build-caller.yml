@@ -1,0 +1,182 @@
+# Calls the org reusable `rtd-sphinx-build`, and publishes what it builds.
+#
+# HISTORY, because the shape of this file is the whole point
+# ---------------------------------------------------------------------------
+# PS-231 §1 flagged the previous `rtd-sphinx-build-on-ubuntu-latest.yml` as
+# re-implementing this reusable. The finding was always TRUE; the remedy was
+# unavailable until scitex-ai/.github#41 (merged 2026-09-06, 1071f1b7) added
+# the three inputs the exemption named: `fail_on_warning`, `python_version`
+# and `upload_artifact`.
+#
+# The conversion was done in the order the callee's own header prescribes,
+# because a one-shot swap can strand a required status context on a name no
+# workflow will ever publish again:
+#
+#   1. add this caller ALONGSIDE the legacy workflow            (PR #146)
+#   2. read the check names GitHub actually publishes           (measured on #146:
+#      legacy `sphinx`, caller `sphinx-via-org-reusable / docs-sphinx`,
+#      both green, both publishing simultaneously)
+#   3. move required contexts while BOTH sets publish           (no-op HERE: measured
+#      on both protected branches, scholar's only required contexts are the three
+#      `pytest-matrix` legs, so `sphinx` was never required and cannot strand.
+#      DO NOT COPY THAT CONCLUSION TO ANOTHER REPO — it is a per-repo, per-branch
+#      fact that lives only behind the branch-protection API.)
+#   4. delete the legacy file and its PS-231 exemption TOGETHER  (PR #147)
+#
+# WHY THE PUBLISH HALF IS A SEPARATE JOB HERE RATHER THAN IN THE CALLEE
+# ---------------------------------------------------------------------------
+# `src/scitex_scholar/_sphinx_html/` is NOT a build artifact: hatch packages
+# `src/scitex_scholar` wholesale, so that bundle SHIPS INSIDE THE WHEEL. The
+# reusable is deliberately build-only and hands the HTML back as an artifact,
+# so each caller vendors and commits under its OWN `contents: write` — which
+# keeps git-push blast radius out of a workflow ~30 repositories call, and
+# avoids a second build.
+#
+# THE FAILURE MODE THIS FILE EXISTS TO AVOID, and it is invisible to CI:
+# a conversion that drops the vendor step leaves users' documentation FROZEN
+# at whatever shipped last, with every check green and nothing saying so.
+# Green CI cannot detect it. The verification is CONTENT, and on the SHIPPED
+# artifact rather than the repo: change a docs source line, let the pipeline
+# run, `pip download scitex-scholar==<version>` into a clean directory,
+# unpack, and grep the vendored bundle for the changed string. A repo-side
+# pass proves only that the artifact landed — the release build is a
+# DIFFERENT RUN and may not have picked it up.
+#
+# THAT ONE TEST CARRIES THREE CLAIMS, and it is the only thing that
+# discriminates all three. Written down because a test whose value is
+# invisible is the first thing dropped when someone trims a slow pipeline:
+#   1. the RELEASE build ships the docs        (repo-side checks cannot see this)
+#   2. the refresh WRITES WHERE the commit step READS   (a wrong path is silent)
+#   3. the artifact is the one from THIS RUN   (a stale but WELL-FORMED artifact
+#      passes every assertion below: non-empty source, non-empty destination,
+#      matching counts, byte-identical content, zero commit — nothing
+#      malformed happened, the docs are simply not the new docs)
+# A string that did not exist when a stale artifact was built cannot appear in
+# it, which is why only this test separates (3) from success.
+# (Cases 2 and 3 raised by figrecipe, 2026-09-07.)
+
+name: docs-caller
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+
+jobs:
+  sphinx-via-org-reusable:
+    # Loop-breaker: skip when HEAD is the bot's own docs auto-commit.
+    # `[skip ci]` is deliberately not used — it would also suppress the
+    # tag-push and release workflows when that auto-commit happens to be the
+    # most recent commit on develop at release time.
+    if: "!contains(github.event.head_commit.message, 'docs(sphinx_html): refresh from CI build')"
+    uses: scitex-ai/.github/.github/workflows/rtd-sphinx-build.yml@main
+    with:
+      # .readthedocs.yaml pins build.tools.python 3.11; the callee defaults to
+      # 3.12, so without this CI and RTD would build the docs on different
+      # interpreters and could disagree about warnings.
+      python_version: "3.11"
+      # `-W` on PULL REQUESTS ONLY. A warning must block a PR; it must NOT
+      # block a push to develop, where failing the build would also stop the
+      # vendored bundle from being refreshed at all.
+      fail_on_warning: ${{ github.event_name == 'pull_request' }}
+      upload_artifact: true
+      artifact_name: sphinx-html
+
+  vendor-and-commit:
+    # develop pushes only. `main` is PR-only: its bundle arrives through the
+    # develop -> main PR, so direct bot-pushes to main stay inhibited and that
+    # branch's history remains linear-via-PR.
+    needs: sphinx-via-org-reusable
+    if: github.event_name == 'push' && github.ref == 'refs/heads/develop'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: sphinx-html
+          path: .sphinx-html-artifact
+
+      - name: Refresh the vendored bundle, and ASSERT WHAT WAS DONE
+        # WHY THE COUNTS AND THE HARD FAILURES BELOW.
+        #
+        # The commit step that follows only commits IF THE BUNDLE CHANGED, so
+        # "no commit" has two causes and only one of them is good:
+        #   GOOD    the rebuilt docs are byte-identical to what is vendored
+        #   BROKEN  this step never wrote where the commit step reads
+        #           (an empty artifact, or a path that stopped matching)
+        # Both are SILENT, and the second freezes users' in-wheel documentation
+        # with every check green — the exact failure this whole conversion was
+        # careful about.
+        #
+        # Counting both sides and failing loudly on zero collapses that
+        # ambiguity: after this step, "no commit" can ONLY mean identical
+        # content, because the other causes are now red builds.
+        #
+        # Gap identified by figrecipe, 2026-09-07: my original reasoning
+        # ("an empty artifact would produce a huge deletion diff, so silence
+        # proves the artifact was right") excluded an empty ARTIFACT but NOT a
+        # wrong PATH — which produces the same silence for the opposite reason.
+        #
+        # WHAT THESE ASSERTIONS DO NOT COVER, stated so nobody mistakes them
+        # for a complete gate: a STALE BUT WELL-FORMED artifact passes all of
+        # them, correctly, because nothing malformed happened. That case is
+        # upstream of this step and no assertion inside it can see it. The
+        # download below passes only `name` and `path` — no `run-id`, no
+        # `github-token` — which on actions/download-artifact@v4 scopes the
+        # lookup to the CURRENT run; that is a reading of the action's
+        # semantics, not something measured here. The docs-line-change test
+        # in the header is what actually discriminates it.
+        run: |
+          set -euo pipefail
+          vendored=src/scitex_scholar/_sphinx_html
+
+          downloaded=$(find .sphinx-html-artifact -type f | wc -l)
+          echo "artifact files downloaded: ${downloaded}"
+          if [ "${downloaded}" -eq 0 ]; then
+            echo "::error::the sphinx-html artifact is empty - nothing to vendor" >&2
+            exit 1
+          fi
+
+          before=$(find "${vendored}" -type f 2>/dev/null | wc -l || true)
+          echo "vendored files before: ${before}"
+
+          rm -rf "${vendored}"
+          mkdir -p "${vendored}"
+          cp -rf .sphinx-html-artifact/. "${vendored}"/
+          rm -rf .sphinx-html-artifact
+
+          # sphinx-build writes its internal cache to <outdir>/.doctrees, so a
+          # whole-directory copy drags it in. It is never served, it is many
+          # megabytes of pickles, and it embeds a verbatim mirror of CPython's
+          # documentation inventory -- which reintroduces retired-engine
+          # vocabulary into the tree on every build. Drop it.
+          rm -rf "${vendored}"/.doctrees
+          touch "${vendored}"/.nojekyll
+
+          after=$(find "${vendored}" -type f | wc -l)
+          echo "vendored files after: ${after}"
+          if [ "${after}" -eq 0 ]; then
+            echo "::error::${vendored} is empty after the refresh - the copy wrote nowhere" >&2
+            exit 1
+          fi
+
+      - name: Commit refreshed HTML if it changed
+        continue-on-error: true
+        run: |
+          set -euo pipefail
+          if [ -n "$(git status --porcelain src/scitex_scholar/_sphinx_html)" ]; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add src/scitex_scholar/_sphinx_html
+            git commit -m "docs(sphinx_html): refresh from CI build"
+            git push
+          else
+            echo "vendored bundle unchanged - nothing to commit"
+          fi
+
+# EOF

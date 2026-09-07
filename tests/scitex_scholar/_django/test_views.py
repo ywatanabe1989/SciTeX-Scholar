@@ -157,7 +157,7 @@ def test_graph_network_requires_doi_param():
     assert resp.status_code == 400
 
 
-@override_settings(CROSSREF_API_URL=None)
+@override_settings(SCITEX_SCHOLAR_CROSSREF_API_URL=None)
 def test_graph_network_returns_503_with_no_api_configured():
     # Arrange
     rf = RequestFactory()
@@ -178,7 +178,7 @@ def test_graph_related_requires_doi_param():
     assert resp.status_code == 400
 
 
-@override_settings(CROSSREF_API_URL=None)
+@override_settings(SCITEX_SCHOLAR_CROSSREF_API_URL=None)
 def test_graph_related_returns_503_with_no_api_configured():
     # Arrange
     rf = RequestFactory()
@@ -199,7 +199,7 @@ def test_graph_paper_requires_doi_param():
     assert resp.status_code == 400
 
 
-@override_settings(CROSSREF_API_URL=None)
+@override_settings(SCITEX_SCHOLAR_CROSSREF_API_URL=None)
 def test_graph_paper_returns_503_with_no_api_configured():
     # Arrange
     rf = RequestFactory()
@@ -210,7 +210,7 @@ def test_graph_paper_returns_503_with_no_api_configured():
     assert resp.status_code == 503
 
 
-@override_settings(CROSSREF_API_URL=None)
+@override_settings(SCITEX_SCHOLAR_CROSSREF_API_URL=None)
 def test_graph_health_returns_503_with_no_api_configured():
     # Arrange
     rf = RequestFactory()
@@ -668,6 +668,276 @@ def test_health_version_is_not_a_placeholder():
     version = json.loads(health(request).content)["version"]
     # Assert
     assert version and version[0].isdigit(), f"unusable version field: {version!r}"
+
+
+# --- refuse to serve without our app installed (hub prod 2026-09-05) ---------
+#
+# The guard runs at IMPORT of `views` against the REAL app registry, so each
+# arm is a fresh interpreter that configures a genuine host project and
+# imports the module -- no fixture patching, the same shape hub runs. The
+# child gets PYTHONPATH pointed at the checkout under test, so it exercises
+# the same source the provenance guard in tests/conftest.py verified.
+
+_HOST_TEMPLATE = """
+import django
+from django.conf import settings
+settings.configure(
+    SECRET_KEY="test-only",
+    INSTALLED_APPS={installed_apps!r},
+    TEMPLATES=[{{"BACKEND": "django.template.backends.django.DjangoTemplates", "APP_DIRS": True}}],
+    STATIC_URL="/static/",
+)
+if {setup!r}:
+    django.setup()
+import scitex_scholar._django.views as views
+print("IMPORTED", views.APP_NAME)
+"""
+
+_HOST_APPS = ["django.contrib.contenttypes", "django.contrib.staticfiles", "scitex_ui"]
+
+
+def _import_views_in_host(installed_apps, setup=True):
+    """Run a throwaway host project that imports our views; return the result."""
+    import os
+    import subprocess
+    import sys
+    from pathlib import Path
+
+    import scitex_scholar
+
+    src_dir = str(Path(scitex_scholar.__file__).resolve().parent.parent)
+    env = {**os.environ, "PYTHONPATH": src_dir}
+    env.pop("DJANGO_SETTINGS_MODULE", None)
+    code = _HOST_TEMPLATE.format(installed_apps=list(installed_apps), setup=setup)
+    return subprocess.run(
+        [sys.executable, "-c", code], env=env, capture_output=True, text=True, timeout=120
+    )
+
+
+def test_views_refuse_to_import_when_host_omits_our_app():
+    """Negative arm: the host forgot ScholarEditorConfig -> named refusal."""
+    # Arrange
+    host_apps = _HOST_APPS
+    # Act
+    result = _import_views_in_host(host_apps)
+    # Assert
+    assert (result.returncode != 0 and views.APP_CONFIG_PATH in result.stderr), result.stderr[-800:]
+
+
+def test_views_refusal_names_installed_apps_as_the_place_to_fix():
+    """The refusal must say WHERE to add the entry, not only that it is missing."""
+    # Arrange
+    host_apps = _HOST_APPS
+    # Act
+    result = _import_views_in_host(host_apps)
+    # Assert
+    assert "INSTALLED_APPS" in result.stderr, result.stderr[-800:]
+
+
+def test_views_import_when_host_installs_our_app():
+    """Positive control for the arms above: same host, app installed -> imports."""
+    # Arrange
+    host_apps = [*_HOST_APPS, views.APP_CONFIG_PATH]
+    # Act
+    result = _import_views_in_host(host_apps)
+    # Assert
+    assert result.returncode == 0 and "IMPORTED" in result.stdout, result.stderr[-800:]
+
+
+def test_views_import_stays_silent_when_registry_is_not_ready():
+    """Unknown is not "not installed": an importer that runs before django.setup() is not refused."""
+    # Arrange
+    host_apps = _HOST_APPS
+    # Act
+    result = _import_views_in_host(host_apps, setup=False)
+    # Assert
+    assert result.returncode == 0 and "IMPORTED" in result.stdout, result.stderr[-800:]
+
+
+def test_app_guard_checks_the_app_name_the_config_declares():
+    """The guard and apps.py must name the same app, or the guard lies."""
+    # Arrange
+    from scitex_scholar._django.apps import ScholarEditorConfig
+
+    expected = (ScholarEditorConfig.name, ScholarEditorConfig.__name__)
+    # Act
+    actual = (views.APP_NAME, views.APP_CONFIG_PATH.rsplit(".", 1)[1])
+    # Assert
+    assert actual == expected
+
+
+# --- the crossref endpoint setting is namespaced; bare name is a loud alias --
+#
+# A host (scitex-hub) defines this setting in ITS settings module, so the
+# leaf's name must be namespaced. The bare spelling is honoured for one
+# release and warns once per process. `override_settings` is Django's own
+# test-time settings mechanism, not a mock: the view reads the real settings
+# object, and each test restores it on exit.
+
+
+def test_api_url_reads_the_namespaced_setting():
+    """The documented name works on its own."""
+    # Arrange
+    from django.test import override_settings
+
+    with override_settings(SCITEX_SCHOLAR_CROSSREF_API_URL="http://ns.example:3333"):
+        # Act
+        resolved = views._api_url()
+    # Assert
+    assert resolved == "http://ns.example:3333"
+
+
+def test_api_url_honours_the_deprecated_bare_setting_for_one_release():
+    """A host still on the pre-1.11 spelling keeps working during the window."""
+    # Arrange
+    from django.test import override_settings
+
+    with override_settings(SCITEX_SCHOLAR_CROSSREF_API_URL=None, CROSSREF_API_URL="http://bare.example:3333"):
+        # Act
+        resolved = views._api_url()
+    # Assert
+    assert resolved == "http://bare.example:3333"
+
+
+def test_api_url_prefers_the_namespaced_setting_when_both_are_set():
+    """Precedence: the documented name must be the one that wins."""
+    # Arrange
+    from django.test import override_settings
+
+    with override_settings(SCITEX_SCHOLAR_CROSSREF_API_URL="http://ns.example:3333", CROSSREF_API_URL="http://bare.example:3333"):
+        # Act
+        resolved = views._api_url()
+    # Assert
+    assert resolved == "http://ns.example:3333"
+
+
+def test_api_url_warns_when_the_deprecated_bare_setting_is_used(caplog):
+    """The alias is LOUD: one warning naming both spellings and the removal release."""
+    # Arrange
+    import logging
+
+    from django.test import override_settings
+
+    views._warned_deprecated_setting = False
+    caplog.set_level(logging.WARNING, logger=views.__name__)
+    with override_settings(SCITEX_SCHOLAR_CROSSREF_API_URL=None, CROSSREF_API_URL="http://bare.example:3333"):
+        # Act
+        views._api_url()
+    # Assert
+    assert all(
+        token in caplog.text
+        for token in ("CROSSREF_API_URL", "SCITEX_SCHOLAR_CROSSREF_API_URL", "deprecated", views._CROSSREF_ALIAS_REMOVAL)
+    ), caplog.text
+
+
+def test_standalone_settings_define_only_the_namespaced_name():
+    """The leaf's own settings module must not keep the alias alive."""
+    # Arrange
+    from django.conf import settings
+
+    # Act
+    defined = (hasattr(settings, "SCITEX_SCHOLAR_CROSSREF_API_URL"), hasattr(settings, "CROSSREF_API_URL"))
+    # Assert
+    assert defined == (True, False)
+
+
+# --- the 503 body must carry the FIX, not only the symptom -------------------
+#
+# Measured 2026-09-02 as a standalone first-run blocker: the citation graph
+# answers 503 and the old body said only "CrossRef API not configured", so a
+# first-time user learned what broke and not what to do. The status was always
+# right; the body was half an answer.
+
+GRAPH_ROUTES_THAT_NEED_AN_ENDPOINT = (
+    ("graph_network", "/api/graph/network", {"doi": "10.1000/x"}),
+    ("graph_related", "/api/graph/related", {"doi": "10.1000/x"}),
+    ("graph_paper", "/api/graph/paper", {"doi": "10.1000/x"}),
+    ("graph_health", "/api/graph/health", {}),
+)
+
+
+def _unconfigured_response(view_name: str, path: str, params: dict):
+    """Call one graph view with no endpoint configured; return its parsed body."""
+    from django.test import override_settings
+
+    with override_settings(SCITEX_SCHOLAR_CROSSREF_API_URL=None, CROSSREF_API_URL=None):
+        request = RequestFactory().get(path, params)
+        response = getattr(views, view_name)(request)
+    return response, json.loads(response.content)
+
+
+@pytest.mark.parametrize("view_name,path,params", GRAPH_ROUTES_THAT_NEED_AN_ENDPOINT)
+def test_unconfigured_graph_route_names_the_setting_to_set(view_name, path, params):
+    """Every 503 must name the variable whose absence caused it."""
+    # Arrange
+    expected = views.CROSSREF_API_URL_SETTING
+    # Act
+    _, body = _unconfigured_response(view_name, path, params)
+    # Assert
+    assert expected in body.get("fix", ""), body
+
+
+@pytest.mark.parametrize("view_name,path,params", GRAPH_ROUTES_THAT_NEED_AN_ENDPOINT)
+def test_unconfigured_graph_route_says_what_to_do_next(view_name, path, params):
+    """A 503 that only states the symptom is half-written (constitution §2)."""
+    # Arrange
+    required_keys = {"error", "detail", "fix", "setting"}
+    # Act
+    _, body = _unconfigured_response(view_name, path, params)
+    # Assert
+    assert required_keys <= set(body), body
+
+
+@pytest.mark.parametrize("view_name,path,params", GRAPH_ROUTES_THAT_NEED_AN_ENDPOINT)
+def test_unconfigured_graph_route_still_answers_503(view_name, path, params):
+    """The status code is the contract consumers branch on; it must not move."""
+    # Arrange
+    expected = 503
+    # Act
+    response, _ = _unconfigured_response(view_name, path, params)
+    # Assert
+    assert response.status_code == expected
+
+
+def test_graph_health_keeps_its_status_field_alongside_the_fix():
+    """graph_health's own shape survives: callers read `status`, not `error`."""
+    # Arrange
+    expected = "unhealthy"
+    # Act
+    _, body = _unconfigured_response("graph_health", "/api/graph/health", {})
+    # Assert
+    assert body.get("status") == expected
+
+
+def test_the_four_routes_give_one_explanation_not_four():
+    """One shared payload: four routes must not drift into four stories."""
+    # Arrange
+    bodies = [
+        _unconfigured_response(name, path, params)[1]
+        for name, path, params in GRAPH_ROUTES_THAT_NEED_AN_ENDPOINT
+    ]
+    # Act
+    fixes = {body["fix"] for body in bodies}
+    # Assert
+    assert len(fixes) == 1, fixes
+
+
+def test_the_503_docs_pointer_names_a_file_that_exists():
+    """A pointer to documentation that is not there is the defect being fixed.
+
+    The first draft of this payload cited a README anchor (`#citation-graph`)
+    that no heading produced. Shipping it would have made the error message a
+    third instance of the week's pattern: an explanation that sends the reader
+    somewhere the thing is not.
+    """
+    # Arrange
+    repo_root = next(
+        p for p in Path(__file__).resolve().parents if (p / "pyproject.toml").is_file()
+    )
+    # Act
+    referenced = repo_root / views._not_configured_payload()["docs"]
+    # Assert
+    assert referenced.is_file(), referenced
 
 
 # EOF

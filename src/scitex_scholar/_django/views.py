@@ -27,6 +27,54 @@ from django.conf import settings as django_settings
 from django.http import HttpResponse, JsonResponse
 from django.template.loader import render_to_string
 
+from django.apps import apps as _django_apps
+from django.core.exceptions import ImproperlyConfigured
+
+# The dotted INSTALLED_APPS entry a host must carry for these views to
+# work. Kept as ONE string so the refusal below and the docs name the
+# same thing (see apps.py for why the label is "scholar_editor").
+APP_NAME = "scitex_scholar._django"
+APP_CONFIG_PATH = "scitex_scholar._django.apps.ScholarEditorConfig"
+
+
+def _refuse_unless_app_installed() -> None:
+    """Fail at import when a host serves these views without our app.
+
+    scitex-hub mounts this module's views under its own urlconf. On
+    2026-09-05 prod did so WITHOUT adding `ScholarEditorConfig` to
+    INSTALLED_APPS, so Django's app_directories loader never saw
+    `scholar/scholar.html` and every logged-in request to /apps/scholar/v2/
+    answered 500 `TemplateDoesNotExist` from `index`. Anonymous requests
+    were redirected to login before reaching the view, so no curl probe
+    ever showed it, and nobody knows how long it stood.
+
+    Serving an app's views without installing the app is a declaration
+    the host cannot honour, and it must fail where the cause is legible
+    -- `manage.py check` and the host's urlconf import both import this
+    module -- rather than evaporate into a 500 behind a login wall.
+
+    Three-valued on purpose: the registry may not be READY when someone
+    imports this module early (a script, a doc build). That is UNKNOWN,
+    not "installed", and an import-time guard must not raise on unknown
+    -- it stays silent and the request path answers as before. So this
+    guard is a gate only where Django has finished loading apps, which
+    is every place that can actually serve a request.
+    """
+    if not _django_apps.ready:
+        return
+    if _django_apps.is_installed(APP_NAME):
+        return
+    raise ImproperlyConfigured(
+        f"{__name__} was imported, but '{APP_NAME}' is not in INSTALLED_APPS. "
+        "Django's template loader only searches installed apps, so every page "
+        "view here would answer 500 TemplateDoesNotExist (scholar/scholar.html). "
+        f"Add '{APP_CONFIG_PATH}' (label 'scholar_editor') to the host "
+        "project's INSTALLED_APPS next to the other mounted leaf apps."
+    )
+
+
+_refuse_unless_app_installed()
+
 # scitex-app >= 0.8.0. Scholar previously COPIED this derivation from
 # their 0.7.1 doc, with a comment claiming the copy kept the two from
 # drifting. Events disproved that: the published derivation was WRONG
@@ -74,9 +122,76 @@ def _make_cache_key(prefix: str, doi: str, **kwargs) -> str:
     return f"cg:{hashlib.md5(':'.join(parts).encode()).hexdigest()}"
 
 
+# The Django setting that names crossref-local's HTTP endpoint. Namespaced,
+# because a host (scitex-hub) defines it in ITS settings module, where a bare
+# `CROSSREF_API_URL` is one collision away from meaning something else.
+# Hub already exports the same spelling as an env var, so host and leaf now
+# agree on one name (hub request, 2026-09-05).
+CROSSREF_API_URL_SETTING = "SCITEX_SCHOLAR_CROSSREF_API_URL"
+
+# Pre-1.11 spelling. Honoured for ONE release so hosts can migrate, and LOUD
+# when used: a silent alias would leave the host believing the old name is
+# still a supported one right up to the release that deletes it.
+CROSSREF_API_URL_SETTING_DEPRECATED = "CROSSREF_API_URL"
+_CROSSREF_ALIAS_REMOVAL = "1.12.0"
+_warned_deprecated_setting = False
+
+
 def _api_url() -> Optional[str]:
-    """Resolve the crossref-local HTTP endpoint from Django settings."""
-    return getattr(django_settings, "CROSSREF_API_URL", None)
+    """Resolve the crossref-local HTTP endpoint from Django settings.
+
+    Reads ``SCITEX_SCHOLAR_CROSSREF_API_URL`` first; it always wins when
+    both spellings are set. The bare ``CROSSREF_API_URL`` is read second,
+    once per process with a warning naming both spellings. ``None`` under
+    either name means "not configured", never "fall through".
+    """
+    global _warned_deprecated_setting
+
+    value = getattr(django_settings, CROSSREF_API_URL_SETTING, None)
+    if value is not None:
+        return value
+    legacy = getattr(django_settings, CROSSREF_API_URL_SETTING_DEPRECATED, None)
+    if legacy is not None:
+        if not _warned_deprecated_setting:
+            _warned_deprecated_setting = True
+            logger.warning(
+                "Django setting %s is deprecated and will be removed in "
+                "scitex-scholar %s; define %s instead. Using the value from "
+                "%s for now.",
+                CROSSREF_API_URL_SETTING_DEPRECATED,
+                _CROSSREF_ALIAS_REMOVAL,
+                CROSSREF_API_URL_SETTING,
+                CROSSREF_API_URL_SETTING_DEPRECATED,
+            )
+        return legacy
+    return None
+
+
+# The citation-graph routes answer 503 when no crossref-local endpoint is
+# configured. That is the right STATUS; the body used to be the wrong ANSWER —
+# "CrossRef API not configured" states what broke and not what to do, which
+# leaves a first-time user stuck with no next step (measured 2026-09-02 as a
+# standalone first-run blocker). Built once and shared so the four routes
+# cannot drift into four different explanations.
+def _not_configured_payload() -> dict:
+    """The 503 body for 'no crossref-local endpoint', with the fix in it."""
+    return {
+        "error": "CrossRef API not configured",
+        "detail": (
+            "The citation graph reads its data from a crossref-local HTTP API; "
+            "scholar never opens the corpus files itself. No endpoint is "
+            "configured, so there is nothing to query."
+        ),
+        "fix": (
+            f"Set {CROSSREF_API_URL_SETTING} to a running crossref-local "
+            "endpoint (env var of the same name, or the Django setting when "
+            "scholar is mounted in a host project), then restart the server. "
+            "Installing the `crossref-local` package supplies a default "
+            "endpoint, which scholar falls back to when the variable is unset."
+        ),
+        "setting": CROSSREF_API_URL_SETTING,
+        "docs": "src/scitex_scholar/citation_graph/README.md",
+    }
 
 
 def _get_builder():
@@ -226,7 +341,7 @@ def graph_network(request):
     # Build network
     builder = _get_builder()
     if not builder:
-        return JsonResponse({"error": "CrossRef API not configured"}, status=503)
+        return JsonResponse(_not_configured_payload(), status=503)
 
     try:
         graph = builder.build(
@@ -266,7 +381,7 @@ def graph_related(request):
 
     builder = _get_builder()
     if not builder:
-        return JsonResponse({"error": "CrossRef API not configured"}, status=503)
+        return JsonResponse(_not_configured_payload(), status=503)
 
     try:
         graph = builder.build(seed_doi=doi, top_n=limit)
@@ -295,7 +410,7 @@ def graph_paper(request):
 
     builder = _get_builder()
     if not builder:
-        return JsonResponse({"error": "CrossRef API not configured"}, status=503)
+        return JsonResponse(_not_configured_payload(), status=503)
 
     try:
         summary = builder.get_paper_summary(doi)
@@ -314,7 +429,7 @@ def graph_health(request):
     api_url = _api_url()
     if not api_url:
         return JsonResponse(
-            {"status": "unhealthy", "error": "No CrossRef API configured"}, status=503
+            {"status": "unhealthy", **_not_configured_payload()}, status=503
         )
 
     try:
