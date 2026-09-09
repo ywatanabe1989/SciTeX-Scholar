@@ -5,7 +5,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>scitex_scholar.citation_graph.builder &mdash; SciTeX Scholar v1.9.0</title>
+  <title>scitex_scholar.citation_graph.builder &mdash; SciTeX Scholar v1.11.0</title>
       <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=b86133f3" />
       <link rel="stylesheet" type="text/css" href="../../../_static/css/theme.css?v=9edc463e" />
       <link rel="stylesheet" type="text/css" href="../../../_static/copybutton.css?v=76b2166b" />
@@ -13,7 +13,7 @@
   
       <script src="../../../_static/jquery.js?v=5d32c60e"></script>
       <script src="../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
-      <script src="../../../_static/documentation_options.js?v=c4cb232b"></script>
+      <script src="../../../_static/documentation_options.js?v=6cf1fb80"></script>
       <script src="../../../_static/doctools.js?v=fd6eb6e6"></script>
       <script src="../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
       <script src="../../../_static/clipboard.min.js?v=a7894cd8"></script>
@@ -540,9 +540,10 @@
 
 <span class="sd">        Args:</span>
 <span class="sd">            api_url: URL of the crossref-local HTTP API. When None, resolved</span>
-<span class="sd">                from ``SCITEX_SCHOLAR_CROSSREF_LOCAL_API_URL`` (legacy</span>
-<span class="sd">                ``CROSSREF_LOCAL_API_URL``), falling back to crossref-local's</span>
-<span class="sd">                own default endpoint.</span>
+<span class="sd">                from ``SCITEX_SCHOLAR_CROSSREF_API_URL`` (legacy</span>
+<span class="sd">                ``SCITEX_SCHOLAR_CROSSREF_LOCAL_API_URL`` / ``CROSSREF_LOCAL_API_URL``,</span>
+<span class="sd">                read loudly), falling back to crossref-local's own default</span>
+<span class="sd">                endpoint.</span>
 <span class="sd">        """</span>
         <span class="kn">from</span><span class="w"> </span><span class="nn">.database_http</span><span class="w"> </span><span class="kn">import</span> <span class="n">CitationDatabaseHTTP</span>
 
