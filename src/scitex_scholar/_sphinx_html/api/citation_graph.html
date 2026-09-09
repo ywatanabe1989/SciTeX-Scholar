@@ -6,7 +6,7 @@
   <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>scitex_scholar.citation_graph &mdash; SciTeX Scholar v1.9.0</title>
+  <title>scitex_scholar.citation_graph &mdash; SciTeX Scholar v1.11.0</title>
       <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=b86133f3" />
       <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=9edc463e" />
       <link rel="stylesheet" type="text/css" href="../_static/copybutton.css?v=76b2166b" />
@@ -14,7 +14,7 @@
   
       <script src="../_static/jquery.js?v=5d32c60e"></script>
       <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
-      <script src="../_static/documentation_options.js?v=c4cb232b"></script>
+      <script src="../_static/documentation_options.js?v=6cf1fb80"></script>
       <script src="../_static/doctools.js?v=fd6eb6e6"></script>
       <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
       <script src="../_static/clipboard.min.js?v=a7894cd8"></script>
@@ -503,9 +503,14 @@
           <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
            <div itemprop="articleBody">
              
-  <section id="module-scitex_scholar.citation_graph">
-<span id="scitex-scholar-citation-graph"></span><h1>scitex_scholar.citation_graph<a class="headerlink" href="#module-scitex_scholar.citation_graph" title="Link to this heading"></a></h1>
-<p>Citation Graph Module</p>
+  <section id="scitex-scholar-citation-graph">
+<h1>scitex_scholar.citation_graph<a class="headerlink" href="#scitex-scholar-citation-graph" title="Link to this heading"></a></h1>
+<p>Citation data is served by a running <code class="docutils literal notranslate"><span class="pre">crossref-local</span></code> HTTP API; this module
+does not open crossref-local’s data files itself. The endpoint is resolved
+from the <code class="docutils literal notranslate"><span class="pre">SCITEX_SCHOLAR_CROSSREF_API_URL</span></code> environment variable (or the
+Django setting of the same name in a host project), and when nothing is set
+<code class="docutils literal notranslate"><span class="pre">CitationGraphBuilder</span></code> falls back to crossref-local’s own default endpoint.</p>
+<p id="module-scitex_scholar.citation_graph">Citation Graph Module</p>
 <p>Build and analyze citation networks for academic papers using CrossRef data.</p>
 <p>This module provides tools to:
 - Extract citation relationships
@@ -552,9 +557,10 @@ corpus is the one that reads it, and Scholar asks it questions.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><p><strong>api_url</strong> (<span class="sphinx_autodoc_typehints-type"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><code class="xref py py-class docutils literal notranslate"><span class="pre">str</span></code></a></span>) – URL of the crossref-local HTTP API. When None, resolved
-from <code class="docutils literal notranslate"><span class="pre">SCITEX_SCHOLAR_CROSSREF_LOCAL_API_URL</span></code> (legacy
-<code class="docutils literal notranslate"><span class="pre">CROSSREF_LOCAL_API_URL</span></code>), falling back to crossref-local’s
-own default endpoint.</p>
+from <code class="docutils literal notranslate"><span class="pre">SCITEX_SCHOLAR_CROSSREF_API_URL</span></code> (legacy
+<code class="docutils literal notranslate"><span class="pre">SCITEX_SCHOLAR_CROSSREF_LOCAL_API_URL</span></code> / <code class="docutils literal notranslate"><span class="pre">CROSSREF_LOCAL_API_URL</span></code>,
+read loudly), falling back to crossref-local’s own default
+endpoint.</p>
 </dd>
 </dl>
 </dd></dl>
@@ -898,9 +904,9 @@ year, citations, similarity, journal.</p>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>graph</strong> (<a class="reference internal" href="#scitex_scholar.citation_graph.CitationGraph" title="scitex_scholar.citation_graph.CitationGraph"><em>CitationGraph</em></a><em> or </em><em>networkx.DiGraph</em>) – Citation network to visualize. CitationGraph is auto-converted
 via <code class="docutils literal notranslate"><span class="pre">to_networkx()</span></code>.</p></li>
-<li><p><strong>backend</strong> (<span class="sphinx_autodoc_typehints-type"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><code class="xref py py-class docutils literal notranslate"><span class="pre">str</span></code></a></span>) – Rendering backend: ‘auto’, ‘figrecipe’, ‘scitex.plt’,
+<li><p><strong>backend</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a>) – Rendering backend: ‘auto’, ‘figrecipe’, ‘scitex.plt’,
 ‘matplotlib’, or ‘pyvis’. Default ‘auto’ picks the best available.</p></li>
-<li><p><strong>output</strong> (<span class="sphinx_autodoc_typehints-type"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Optional" title="(in Python v3.14)"><code class="xref py py-data docutils literal notranslate"><span class="pre">Optional</span></code></a>[<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><code class="xref py py-class docutils literal notranslate"><span class="pre">str</span></code></a>]</span>) – Output file path. Required for ‘pyvis’ backend (HTML).
+<li><p><strong>output</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a><em>, </em><em>optional</em>) – Output file path. Required for ‘pyvis’ backend (HTML).
 For static backends, saves the figure to this path.</p></li>
 <li><p><strong>**kwargs</strong> – Backend-specific keyword arguments (layout, seed, figsize, etc.).</p></li>
 </ul>
@@ -911,7 +917,7 @@ For static backends, saves the figure to this path.</p></li>
 Pyvis returns <code class="docutils literal notranslate"><span class="pre">{'output',</span> <span class="pre">'backend'}</span></code>.</p>
 </dd>
 <dt class="field-odd">Return type<span class="colon">:</span></dt>
-<dd class="field-odd"><p><span class="sphinx_autodoc_typehints-type"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Dict" title="(in Python v3.14)"><code class="xref py py-class docutils literal notranslate"><span class="pre">Dict</span></code></a>[<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><code class="xref py py-class docutils literal notranslate"><span class="pre">str</span></code></a>, <a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Any" title="(in Python v3.14)"><code class="xref py py-data docutils literal notranslate"><span class="pre">Any</span></code></a>]</span></p>
+<dd class="field-odd"><p><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#dict" title="(in Python v3.14)">dict</a></p>
 </dd>
 </dl>
 </dd></dl>
@@ -925,7 +931,7 @@ Pyvis returns <code class="docutils literal notranslate"><span class="pre">{'out
 <dd class="field-odd"><p>Mapping of backend name to availability.</p>
 </dd>
 <dt class="field-even">Return type<span class="colon">:</span></dt>
-<dd class="field-even"><p><span class="sphinx_autodoc_typehints-type"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Dict" title="(in Python v3.14)"><code class="xref py py-class docutils literal notranslate"><span class="pre">Dict</span></code></a>[<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><code class="xref py py-class docutils literal notranslate"><span class="pre">str</span></code></a>, <a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)"><code class="xref py py-class docutils literal notranslate"><span class="pre">bool</span></code></a>]</span></p>
+<dd class="field-even"><p><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#dict" title="(in Python v3.14)">dict</a></p>
 </dd>
 </dl>
 </dd></dl>
