@@ -23,6 +23,7 @@ bootstrap via conftest.py (bare `django.setup()`, no pytest-django dep).
 from __future__ import annotations
 
 import json
+import os
 import re
 from pathlib import Path
 
@@ -675,8 +676,10 @@ def test_health_version_is_not_a_placeholder():
 # The guard runs at IMPORT of `views` against the REAL app registry, so each
 # arm is a fresh interpreter that configures a genuine host project and
 # imports the module -- no fixture patching, the same shape hub runs. The
-# child gets PYTHONPATH pointed at the checkout under test, so it exercises
-# the same source the provenance guard in tests/conftest.py verified.
+# child gets the checkout PREPENDED to PYTHONPATH, so it exercises the same
+# source the provenance guard in tests/conftest.py verified -- while still
+# inheriting whatever else PYTHONPATH was carrying, which in some CI images
+# is where the dependencies themselves live.
 
 _HOST_TEMPLATE = """
 import django
@@ -706,7 +709,22 @@ def _import_views_in_host(installed_apps, setup=True):
     import scitex_scholar
 
     src_dir = str(Path(scitex_scholar.__file__).resolve().parent.parent)
-    env = {**os.environ, "PYTHONPATH": src_dir}
+    # PREPEND, never REPLACE. Some environments deliver dependencies THROUGH
+    # PYTHONPATH rather than installing them into the interpreter -- the
+    # release job runs the suite inside an apptainer image whose deps are
+    # "layered, not on the bare runner". Overwriting PYTHONPATH there deleted
+    # django from the child, and these four tests failed with
+    # ModuleNotFoundError while the parent process imported django fine.
+    #
+    # It passed locally and on every PR, because in those environments the
+    # deps live in the venv and PYTHONPATH carries nothing -- so replacing it
+    # cost nothing. The release gate was the only place the difference showed,
+    # and it is the reason 1.11.0 halted before publishing rather than after.
+    inherited = os.environ.get("PYTHONPATH", "")
+    env = {
+        **os.environ,
+        "PYTHONPATH": f"{src_dir}{os.pathsep}{inherited}" if inherited else src_dir,
+    }
     env.pop("DJANGO_SETTINGS_MODULE", None)
     code = _HOST_TEMPLATE.format(installed_apps=list(installed_apps), setup=setup)
     return subprocess.run(
@@ -938,6 +956,44 @@ def test_the_503_docs_pointer_names_a_file_that_exists():
     referenced = repo_root / views._not_configured_payload()["docs"]
     # Assert
     assert referenced.is_file(), referenced
+
+
+def test_host_subprocess_inherits_an_existing_pythonpath(tmp_path):
+    """The child must KEEP what PYTHONPATH already carried, not just get src/.
+
+    REGRESSION, and it cost a release. The helper above built the child's
+    environment as {**os.environ, "PYTHONPATH": src_dir} -- a REPLACEMENT. In
+    environments that deliver DEPENDENCIES through PYTHONPATH rather than
+    installing them into the interpreter (the release job runs the suite in an
+    apptainer image whose deps are "layered, not on the bare runner"), that
+    deleted django from the child, and the four host-subprocess tests failed
+    with ModuleNotFoundError while the parent imported django perfectly well.
+
+    It passed locally and on every PR because in those environments PYTHONPATH
+    is empty, so replacing it costs nothing -- the defect was invisible
+    everywhere except the one environment that layers deps. This test makes it
+    visible everywhere: it puts a marker module on PYTHONPATH and requires the
+    child to still find it.
+
+    The env var is set on the real environment and restored by hand (the
+    idiom this repo's other env tests use), not via a patch fixture: the whole
+    point of the test is that a REAL child process inherits a REAL value, and
+    a patched view of it would be testing the patch, not the inheritance.
+    """
+    # Arrange
+    (tmp_path / "pythonpath_marker.py").write_text("VALUE = 'inherited'\n")
+    prior = os.environ.get("PYTHONPATH")
+    os.environ["PYTHONPATH"] = str(tmp_path)
+    try:
+        # Act
+        result = _import_views_in_host([*_HOST_APPS, views.APP_CONFIG_PATH])
+    finally:
+        if prior is None:
+            os.environ.pop("PYTHONPATH", None)
+        else:
+            os.environ["PYTHONPATH"] = prior
+    # Assert
+    assert result.returncode == 0, result.stderr[-800:]
 
 
 # EOF
