@@ -23,6 +23,7 @@ bootstrap via conftest.py (bare `django.setup()`, no pytest-django dep).
 from __future__ import annotations
 
 import json
+import os
 import re
 from pathlib import Path
 
@@ -957,7 +958,7 @@ def test_the_503_docs_pointer_names_a_file_that_exists():
     assert referenced.is_file(), referenced
 
 
-def test_host_subprocess_inherits_an_existing_pythonpath(monkeypatch, tmp_path):
+def test_host_subprocess_inherits_an_existing_pythonpath(tmp_path):
     """The child must KEEP what PYTHONPATH already carried, not just get src/.
 
     REGRESSION, and it cost a release. The helper above built the child's
@@ -973,12 +974,24 @@ def test_host_subprocess_inherits_an_existing_pythonpath(monkeypatch, tmp_path):
     everywhere except the one environment that layers deps. This test makes it
     visible everywhere: it puts a marker module on PYTHONPATH and requires the
     child to still find it.
+
+    The env var is set on the real environment and restored by hand (the
+    idiom this repo's other env tests use), not via a patch fixture: the whole
+    point of the test is that a REAL child process inherits a REAL value, and
+    a patched view of it would be testing the patch, not the inheritance.
     """
     # Arrange
     (tmp_path / "pythonpath_marker.py").write_text("VALUE = 'inherited'\n")
-    monkeypatch.setenv("PYTHONPATH", str(tmp_path))
-    # Act
-    result = _import_views_in_host([*_HOST_APPS, views.APP_CONFIG_PATH])
+    prior = os.environ.get("PYTHONPATH")
+    os.environ["PYTHONPATH"] = str(tmp_path)
+    try:
+        # Act
+        result = _import_views_in_host([*_HOST_APPS, views.APP_CONFIG_PATH])
+    finally:
+        if prior is None:
+            os.environ.pop("PYTHONPATH", None)
+        else:
+            os.environ["PYTHONPATH"] = prior
     # Assert
     assert result.returncode == 0, result.stderr[-800:]
 
