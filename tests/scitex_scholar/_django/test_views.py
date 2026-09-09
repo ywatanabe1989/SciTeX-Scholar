@@ -693,6 +693,10 @@ settings.configure(
 if {setup!r}:
     django.setup()
 import scitex_scholar._django.views as views
+import os as _os
+_marker = _os.environ.get("SCITEX_TEST_MARKER")
+if _marker:
+    __import__(_marker)
 print("IMPORTED", views.APP_NAME)
 """
 
@@ -972,8 +976,9 @@ def test_host_subprocess_inherits_an_existing_pythonpath(tmp_path):
     It passed locally and on every PR because in those environments PYTHONPATH
     is empty, so replacing it costs nothing -- the defect was invisible
     everywhere except the one environment that layers deps. This test makes it
-    visible everywhere: it puts a marker module on PYTHONPATH and requires the
-    child to still find it.
+    visible everywhere: it puts a marker module on PYTHONPATH, and the child
+    script itself imports that marker (via SCITEX_TEST_MARKER), so the
+    inheritance is asserted by the child, not inferred by the parent.
 
     The env var is set on the real environment and restored by hand (the
     idiom this repo's other env tests use), not via a patch fixture: the whole
@@ -983,7 +988,14 @@ def test_host_subprocess_inherits_an_existing_pythonpath(tmp_path):
     # Arrange
     (tmp_path / "pythonpath_marker.py").write_text("VALUE = 'inherited'\n")
     prior = os.environ.get("PYTHONPATH")
-    os.environ["PYTHONPATH"] = str(tmp_path)
+    # PREPEND the marker dir to whatever PYTHONPATH already carried. In the
+    # release image the real deps (django included) are layered ONTO PYTHONPATH;
+    # replacing it here would make THIS test commit the very clobbering bug under
+    # test -- the child would lose django. Prepending keeps the layered deps and
+    # adds the marker. The child then imports the marker (via SCITEX_TEST_MARKER),
+    # so "the child sees what was already on PYTHONPATH" is asserted, not assumed.
+    os.environ["PYTHONPATH"] = f"{tmp_path}{os.pathsep}{prior}" if prior else str(tmp_path)
+    os.environ["SCITEX_TEST_MARKER"] = "pythonpath_marker"
     try:
         # Act
         result = _import_views_in_host([*_HOST_APPS, views.APP_CONFIG_PATH])
@@ -992,6 +1004,7 @@ def test_host_subprocess_inherits_an_existing_pythonpath(tmp_path):
             os.environ.pop("PYTHONPATH", None)
         else:
             os.environ["PYTHONPATH"] = prior
+        os.environ.pop("SCITEX_TEST_MARKER", None)
     # Assert
     assert result.returncode == 0, result.stderr[-800:]
 
