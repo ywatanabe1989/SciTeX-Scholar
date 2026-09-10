@@ -19,8 +19,11 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import json
 import logging
+import os
 import time
+from pathlib import Path
 from typing import Dict, Optional
 
 from django.conf import settings as django_settings
@@ -88,7 +91,7 @@ _refuse_unless_app_installed()
 # THAT EMITS THE MARKER, pass that view's route here; the function
 # raises MountPrefixMismatch rather than guessing.
 from scitex_app.embed import mount_prefix
-from django.views.decorators.http import require_GET
+from django.views.decorators.http import require_GET, require_POST
 
 logger = logging.getLogger(__name__)
 
@@ -506,6 +509,159 @@ def search(request):
     except Exception as e:
         logger.error(f"Search failed for {query!r}: {e}", exc_info=True)
         return JsonResponse({"error": f"Search failed: {e}"}, status=500)
+
+
+# ---------------------------------------------------------------------------
+# Library API (#106: metadata enrichment as a contextual Library operation).
+#
+# Thin HTTP adapters over the package's own storage and enrichment layer --
+# the same code the `scitex-scholar library` CLI drives. No library or
+# enrichment logic lives in these views:
+#   list  -> storage._library_index (user's local library index)
+#   enrich-> storage.PaperIO (master metadata.json) +
+#            pipelines.ScholarPipelineMetadataSingle (the enrichment engine)
+#
+# USER SCOPE: standalone scholar has no account system; the user's library is
+# the local, per-user directory (~/.scitex/scholar/library) -- the same store
+# the CLI reads, satisfying the operator's "standalone works without an
+# account; the local library is the default" constraint (2026-09-02). The
+# SCITEX_SCHOLAR_LIBRARY_ROOT env var is a test seam set in the SERVER
+# process, not an HTTP parameter, so an unauthenticated client cannot redirect
+# the API to another user's library.
+# ---------------------------------------------------------------------------
+
+
+def _library_root() -> Path:
+    """The library root this view serves. Default: the user's home library."""
+    override = os.environ.get("SCITEX_SCHOLAR_LIBRARY_ROOT")
+    if override:
+        return Path(override).expanduser().resolve()
+    from scitex_scholar._cli._library_shared import default_library_root
+
+    return default_library_root()
+
+
+def _load_library_paper(root: Path, paper_id: str):
+    """Load one master metadata.json as a Paper, keyed by paper_id.
+
+    Real library files store {"metadata": {...}} with no "container", so the
+    paper_id is set explicitly -- that is what PaperIO needs to write back to
+    the same MASTER/<paper_id>/ directory on save.
+    """
+    from scitex_scholar.core.Paper import Paper
+
+    meta_path = root / "MASTER" / paper_id / "metadata.json"
+    data = json.loads(meta_path.read_text())
+    paper = Paper.from_dict(data)
+    paper.container.library_id = paper_id
+    return paper
+
+
+def _save_library_paper(paper, root: Path) -> Path:
+    """Persist an enriched Paper to its master dir.
+
+    The library is the user's local MASTER files; the view writes them directly
+    (PaperIO) and does NOT touch the shared relational library index -- that
+    store is keyed by the running user, and rebuilding it here would couple the
+    GUI to a store the app may not own. Reading back is done straight from the
+    master files (see library_list), which is the same user-scope guarantee.
+    """
+    from scitex_scholar.storage.PaperIO import PaperIO
+
+    paper_id = paper.container.library_id
+    io = PaperIO(paper, base_dir=root / "MASTER")
+    return io.save_metadata()
+
+
+@require_GET
+def library_list(request):
+    """List the user's local library papers.
+
+    Returns {papers: [...], count, library_root}. Reads the user's MASTER
+    metadata files directly (``collect_rows`` -- "no store involved"), so the
+    list is scoped to this user's local library and never depends on a shared
+    relational index. An empty or missing library is an empty list, not an
+    error.
+    """
+    root = _library_root()
+    from scitex_scholar.storage import _library_index as idx
+
+    try:
+        rows = idx.collect_rows(root)
+    except FileNotFoundError:
+        return JsonResponse({"papers": [], "count": 0, "library_root": str(root)})
+    except ValueError as e:
+        # Duplicate DOIs across MASTER entries == library corruption; surface it
+        # rather than silently listing an inconsistent view.
+        logger.error(f"library list: {e}")
+        return JsonResponse({"error": f"Library index inconsistent: {e}"}, status=500)
+
+    papers = [
+        {
+            "paper_id": r.get("paper_id"),
+            "doi": r.get("doi"),
+            "title": r.get("title"),
+            "year": r.get("year"),
+            "venue": r.get("venue"),
+            "abstract": r.get("abstract"),
+            "citation_count": r.get("citation_count"),
+            "authors": json.loads(r["authors_json"]) if r.get("authors_json") else [],
+        }
+        for r in rows
+    ]
+    return JsonResponse({"papers": papers, "count": len(papers), "library_root": str(root)})
+
+
+@require_POST
+def library_enrich(request, _pipeline=None):
+    """Enrich ONE library paper's metadata from the databases (#106).
+
+    Body: {"paper_id": str, "force": bool}. Loads the master record, runs the
+    package's enrichment engine, and writes the enriched metadata back to the
+    same user-scoped library (no account required).
+
+    `_pipeline` is a test-injection seam (PA-306: the collaborator is a
+    parameter, not a monkeypatch). Django routes call it with only `request`
+    (``_pipeline=None`` -> the real ScholarPipelineMetadataSingle); tests call
+    the function directly with a deterministic, offline fake.
+    """
+    paper_id = (request.POST.get("paper_id") or "").strip()
+    if not paper_id:
+        return JsonResponse({"error": "paper_id required"}, status=400)
+    force = (request.POST.get("force") or "").lower() in ("1", "true", "yes")
+
+    root = _library_root()
+    meta_path = root / "MASTER" / paper_id / "metadata.json"
+    if not meta_path.is_file():
+        return JsonResponse({"error": f"library paper not found: {paper_id}"}, status=404)
+
+    try:
+        paper = _load_library_paper(root, paper_id)
+
+        if _pipeline is None:
+            from scitex_scholar.pipelines.ScholarPipelineMetadataSingle import (
+                ScholarPipelineMetadataSingle,
+            )
+            _pipeline = ScholarPipelineMetadataSingle()
+
+        enriched = asyncio.run(_pipeline.enrich_paper_async(paper, force=force))
+        _save_library_paper(enriched, root)
+
+        m = enriched.metadata
+        return JsonResponse(
+            {
+                "ok": True,
+                "paper_id": paper_id,
+                "doi": m.id.doi,
+                "title": m.basic.title,
+                "year": m.basic.year,
+                "abstract_chars": len(m.basic.abstract or ""),
+                "citation_count": m.citation_count.total,
+            }
+        )
+    except Exception as e:
+        logger.error(f"library enrich failed for {paper_id!r}: {e}", exc_info=True)
+        return JsonResponse({"error": f"Enrichment failed: {e}"}, status=500)
 
 
 # EOF

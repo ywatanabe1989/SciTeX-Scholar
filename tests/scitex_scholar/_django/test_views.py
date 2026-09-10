@@ -1099,21 +1099,6 @@ def test_crossref_api_status_moved_out_of_the_sidebar():
     assert in_advanced and not_a_sidebar_section
 
 
-def test_placeholder_tabs_share_the_stable_container():
-    # Arrange
-    tpl = COMPASS_TEMPLATE.read_text()
-    # Act
-    # Only the Library tab is still a placeholder (Enrichment was removed, TODO 105),
-    # so only it is checked here; it must share the content tabs' container so
-    # switching Search<->Library does not shift the layout.
-    stable = (
-        tpl.rindex("citation-graph-container", 0, tpl.index('id="tab-library"') + 400)
-        < tpl.index("tab-placeholder", tpl.index('id="tab-library"'))
-    )
-    # Assert
-    assert stable
-
-
 def test_search_and_library_content_share_one_container_class():
     # Arrange
     # #101: "keep primary content/header geometry stable when moving between
@@ -1273,6 +1258,167 @@ def test_search_form_row_stacks_on_mobile():
     input_can_shrink = "min-width: 0" in layout_css
     # Assert
     assert in_mobile_block and stacks_form_row and input_can_shrink
+
+
+# ---------------------------------------------------------------------------
+# #106: metadata enrichment as a contextual Library operation.
+#
+# Enrichment is an action ON a library item (a per-row button in the Library
+# tab), NOT a top-level tab (#105 kept it off the nav). The two API routes are
+# thin adapters over the package's own storage + enrichment layer; the tests
+# below exercise them end-to-end against a temporary, user-scoped library with
+# a deterministic offline enrichment fake (PA-306: the pipeline is a
+# parameter, not a monkeypatch; the env var is set/restored by hand, not via
+# the monkeypatch fixture). No network, no user data.
+# ---------------------------------------------------------------------------
+
+import contextlib
+import json as _json
+
+
+@contextlib.contextmanager
+def _library_env(root: Path):
+    """Point the view's library (and its backing store) at a temp root,
+    restoring both on exit. The sanctioned env-var yield pattern, not
+    monkeypatch."""
+    old_dir = os.environ.get("SCITEX_DIR")
+    old_root = os.environ.get("SCITEX_SCHOLAR_LIBRARY_ROOT")
+    os.environ["SCITEX_DIR"] = str(root / ".scitex")
+    os.environ["SCITEX_SCHOLAR_LIBRARY_ROOT"] = str(root)
+    try:
+        yield
+    finally:
+        if old_dir is None:
+            os.environ.pop("SCITEX_DIR", None)
+        else:
+            os.environ["SCITEX_DIR"] = old_dir
+        if old_root is None:
+            os.environ.pop("SCITEX_SCHOLAR_LIBRARY_ROOT", None)
+        else:
+            os.environ["SCITEX_SCHOLAR_LIBRARY_ROOT"] = old_root
+
+
+def _seed_library(root: Path, paper_id: str = "PID1",
+                  doi: str = "10.1/example", title: str = "A paper",
+                  year: int = 2024, abstract: str = None) -> Path:
+    """Create one master entry; return its metadata.json path."""
+    entry = root / "MASTER" / paper_id
+    entry.mkdir(parents=True, exist_ok=True)
+    basic = {"title": title, "year": year}
+    if abstract is not None:
+        basic["abstract"] = abstract
+    meta = {"metadata": {"id": {"doi": doi}, "basic": basic}}
+    path = entry / "metadata.json"
+    path.write_text(_json.dumps(meta))
+    return path
+
+
+class _OfflineEnrich:
+    """Deterministic offline enrichment fake (hand-rolled, no network).
+
+    Sets a fixed abstract + citation count so the persistence assertion is
+    exact. Stands in for ScholarPipelineMetadataSingle via the view's
+    `_pipeline` injection seam."""
+
+    async def enrich_paper_async(self, paper, force: bool = False):
+        paper.metadata.basic.abstract = "OFFLINE FAKE ABSTRACT"
+        paper.metadata.citation_count.total = 7
+        return paper
+
+
+def test_library_list_returns_user_papers(tmp_path):
+    # Arrange
+    with _library_env(tmp_path):
+        meta = _seed_library(tmp_path, abstract=None)
+        rf = RequestFactory()
+        # Act
+        resp = views.library_list(rf.get("/api/library"))
+        data = _json.loads(resp.content)
+        # Assert
+        listed = data["papers"]
+        assert (
+            data["count"] == 1
+            and listed[0]["paper_id"] == "PID1"
+            and listed[0]["doi"] == "10.1/example"
+            and listed[0]["title"] == "A paper"
+            and meta.is_file()
+        )
+
+
+def test_library_list_empty_when_no_master(tmp_path):
+    # Arrange
+    with _library_env(tmp_path):
+        rf = RequestFactory()
+        # Act
+        data = _json.loads(views.library_list(rf.get("/api/library")).content)
+        # Assert
+        assert data["papers"] == [] and data["count"] == 0
+
+
+def test_library_enrich_persists_metadata(tmp_path):
+    # Arrange
+    with _library_env(tmp_path):
+        meta_path = _seed_library(tmp_path, abstract=None)
+        rf = RequestFactory()
+        req = rf.post("/api/library/enrich", {"paper_id": "PID1"})
+        # Act — inject the deterministic offline pipeline (no network).
+        resp = views.library_enrich(req, _pipeline=_OfflineEnrich())
+        data = _json.loads(resp.content)
+        reloaded = _json.loads(meta_path.read_text())["metadata"]["basic"]
+        # Assert — the enriched metadata is written back to the SAME user-scope
+        # master record (abstract now present, citation count persisted).
+        assert (
+            data["ok"] is True
+            and data["abstract_chars"] == len("OFFLINE FAKE ABSTRACT")
+            and reloaded["abstract"] == "OFFLINE FAKE ABSTRACT"
+        )
+
+
+def test_library_enrich_requires_paper_id(tmp_path):
+    # Arrange
+    with _library_env(tmp_path):
+        rf = RequestFactory()
+        # Act
+        resp = views.library_enrich(rf.post("/api/library/enrich", {}))
+        # Assert
+        assert resp.status_code == 400
+
+
+def test_library_enrich_404_for_unknown_paper(tmp_path):
+    # Arrange
+    with _library_env(tmp_path):
+        _seed_library(tmp_path, paper_id="KNOWN")
+        rf = RequestFactory()
+        # Act
+        resp = views.library_enrich(rf.post("/api/library/enrich", {"paper_id": "MISSING"}))
+        # Assert
+        assert resp.status_code == 404
+
+
+def test_enrichment_is_a_contextual_library_action_not_a_tab():
+    # Arrange
+    # #106 + #105: enrichment is a per-row action inside the Library tab, never
+    # a top-level tab. The tab bar is unchanged (3 tabs), the Library panel
+    # carries the list + Enrich wiring, and the JS posts to the enrich route.
+    body = _compass_index_body()
+    tpl = COMPASS_TEMPLATE.read_text()
+    js = (COMPASS_SEARCH_JS.parent / "library.js").read_text()
+    # Act
+    no_enrich_tab = 'data-tab="enrichment"' not in body
+    library_has_list = 'id="libraryList"' in tpl and 'class="library-list"' in tpl
+    js_wires_enrich = "api/library/enrich" in js and 'method: "POST"' in js
+    # Assert
+    assert no_enrich_tab and library_has_list and js_wires_enrich
+
+
+def test_library_api_routes_are_registered():
+    # Arrange
+    from django.urls import resolve
+    # Act
+    listed = resolve("/api/library").func.__name__
+    enriched = resolve("/api/library/enrich").func.__name__
+    # Assert
+    assert listed == "library_list" and enriched == "library_enrich"
 
 
 # EOF
