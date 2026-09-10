@@ -7,6 +7,14 @@ this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed
+- **Metadata Enrichment is no longer a top-level tab** (compass 2026-09-10,
+  TODO 105). Small operations should not be promoted to top-level navigation;
+  the Enrichment tab and its "Coming in Phase 4" placeholder are removed,
+  leaving the standalone GUI with three tabs (Search, Library, Citation
+  Graph). Enrichment actions will live inside the Library surface (TODO 106,
+  a separate build) rather than as their own tab.
+
 ## [1.11.0] - 2026-09-07
 
 ### Added

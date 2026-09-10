@@ -1009,4 +1009,33 @@ def test_host_subprocess_inherits_an_existing_pythonpath(tmp_path):
     assert result.returncode == 0, result.stderr[-800:]
 
 
+# ---------------------------------------------------------------------------
+# Compass 2026-09-10, TODO 105 / L337: Metadata Enrichment is no longer a
+# top-level tab. Small operations must not be promoted to top-level
+# navigation; enrichment moves inside the Library surface (TODO 106, which is
+# a separate, Library-dependent build). This pins the absence so a future edit
+# that re-adds the tab fails here rather than silently regressing.
+# ---------------------------------------------------------------------------
+
+
+def test_enrichment_is_not_a_top_level_tab():
+    # Arrange
+    body = views.index(RequestFactory().get("/")).content.decode()
+    # Act
+    no_button = 'data-tab="enrichment"' not in body
+    no_panel = 'id="tab-enrichment"' not in body
+    no_placeholder_heading = "Metadata Enrichment" not in body
+    # Assert
+    assert no_button and no_panel and no_placeholder_heading
+
+
+def test_scholar_tab_bar_has_exactly_three_tabs():
+    # Arrange
+    body = views.index(RequestFactory().get("/")).content.decode()
+    # Act
+    tab_count = body.count('class="tab-btn')
+    # Assert
+    assert tab_count == 3
+
+
 # EOF
