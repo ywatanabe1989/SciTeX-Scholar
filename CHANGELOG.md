@@ -23,6 +23,12 @@ this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   layout, and each search result with a DOI offers a quiet "Build citation
   graph" action that prefills the Graph tab — a graph can be started from a
   search result rather than only via the top-level tab.
+- **The Search surface now says where it searches** (compass 2026-09-10,
+  TODO 115/116). The tab and submit button read "Search databases" and the
+  description names the external databases (OpenAlex, Crossref, PubMed,
+  Semantic Scholar) and states it searches external databases, not the
+  Library — so a user is not left guessing that the (not-yet-built) Library
+  is the default target.
 
 ## [1.11.0] - 2026-09-07
 

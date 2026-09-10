@@ -1133,4 +1133,36 @@ def test_search_input_has_a_44px_touch_target():
     assert has_target
 
 
+# --- item 116/115/114: "Search" must say WHERE it searches ------------------
+#
+# Compass 2026-09-10: a bare "Search" label does not tell a researcher whether
+# they are querying the external databases or their own library -- and the
+# library does not exist yet. The tab and the submit button now read
+# "Search databases" and the description names the external databases and
+# contrasts them with the Library tab.
+# ---------------------------------------------------------------------------
+
+
+def test_search_tab_and_button_are_labelled_databases():
+    # Arrange
+    body = _compass_index_body()
+    # Act
+    tab_label = 'class="tab-btn active" data-tab="search">Search databases<' in body
+    button_label = 'class="btn-build">Search databases<' in body
+    # Assert
+    assert tab_label and button_label
+
+
+def test_search_description_clarifies_external_databases_not_library():
+    # Arrange
+    body = _compass_index_body()
+    # Act
+    # The description must both name the external databases and contrast them
+    # with the Library so the two surfaces are not confused.
+    names_external = "external databases" in body
+    contrasts_library = "not your Library" in body
+    # Assert
+    assert names_external and contrasts_library
+
+
 # EOF
