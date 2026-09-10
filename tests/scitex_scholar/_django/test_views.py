@@ -1009,4 +1009,128 @@ def test_host_subprocess_inherits_an_existing_pythonpath(tmp_path):
     assert result.returncode == 0, result.stderr[-800:]
 
 
+# ---------------------------------------------------------------------------
+# Compass 2026-09-10, Scholar search-UX structure.
+#
+# Regression guards for the search-first rework of the standalone Django GUI
+# (compass-impl-scitex-scholar-20260910). They assert STRUCTURE, not pixels:
+# render the template via views.index or read the shipped CSS/JS directly and
+# pin the DOM the page ships, so a future edit that reintroduces the old
+# layout fails here. One assertion per test, AAA-marked, matching this file's
+# convention (and the PA-307 §3 audit rule).
+#
+#   L303 Search is the primary, default tab; 44px touch target on the input.
+#   L653 Advanced query syntax collapsed; cache + source + CrossRef status out
+#        of the always-visible sidebar into a collapsed "Advanced" section.
+#   L316 Placeholder tabs share the same container as content tabs (no jump).
+#   L345 Each search result with a DOI offers "Build citation graph".
+# ---------------------------------------------------------------------------
+
+COMPASS_CSS_DIR = Path(views.__file__).parent / "static" / "scholar" / "css" / "_partials"
+COMPASS_SEARCH_JS = Path(views.__file__).parent / "static" / "scholar" / "js" / "search.js"
+COMPASS_TEMPLATE = TEMPLATE
+
+
+def _compass_index_body() -> str:
+    """Render the standalone index; the browser's HTML is the thing under test."""
+    return views.index(RequestFactory().get("/")).content.decode()
+
+
+def test_search_is_the_default_active_tab():
+    # Arrange
+    body = _compass_index_body()
+    # Act
+    search_default = 'class="tab-btn active" data-tab="search"' in body
+    search_panel_active = 'id="tab-search" class="tab-panel active"' in body
+    # Assert
+    assert search_default and search_panel_active
+
+
+def test_graph_tab_is_not_default_but_still_present():
+    # Arrange
+    body = _compass_index_body()
+    # Act
+    graph_present = 'data-tab="graph"' in body
+    graph_not_default = 'class="tab-btn active" data-tab="graph"' not in body
+    graph_panel_not_active = 'id="tab-graph" class="tab-panel active"' not in body
+    # Assert
+    assert graph_present and graph_not_default and graph_panel_not_active
+
+
+def test_advanced_section_is_collapsed_by_default():
+    # Arrange
+    body = _compass_index_body()
+    # Act
+    present = "search-advanced" in body
+    closed_on_load = '<details class="search-advanced">' in body  # no open attr
+    # Assert
+    assert present and closed_on_load
+
+
+def test_advanced_hides_query_syntax_until_requested():
+    # Arrange
+    body = _compass_index_body()
+    # Act
+    syntax_block = "search-advanced__syntax" in body
+    impact_factor_syntax = "if:&gt;5" in body  # escaped in the template
+    # Assert
+    assert syntax_block and impact_factor_syntax
+
+
+def test_ignore_cache_and_source_are_wired_to_the_api():
+    # Arrange
+    body = _compass_index_body()
+    js = COMPASS_SEARCH_JS.read_text()
+    # Act
+    checkbox_present = 'id="searchNoCache"' in body
+    forwards_no_cache = 'params.set("no_cache", "true")' in js
+    forwards_mode = 'params.set("mode", modeSelect.value)' in js
+    # Assert
+    assert checkbox_present and forwards_no_cache and forwards_mode
+
+
+def test_crossref_api_status_moved_out_of_the_sidebar():
+    # Arrange
+    body = _compass_index_body()
+    # Act
+    in_advanced = "search-advanced__api" in body
+    not_a_sidebar_section = 'sidebar-section__title">CrossRef API</span>' not in body
+    # Assert
+    assert in_advanced and not_a_sidebar_section
+
+
+def test_placeholder_tabs_share_the_stable_container():
+    # Arrange
+    tpl = COMPASS_TEMPLATE.read_text()
+    # Act
+    stable = all(
+        tpl.rindex("citation-graph-container", 0, tpl.index(f'id="{tab_id}"') + 400)
+        < tpl.index("tab-placeholder", tpl.index(f'id="{tab_id}"'))
+        for tab_id in ("tab-library", "tab-enrichment")
+    )
+    # Assert
+    assert stable
+
+
+def test_search_results_offer_build_citation_graph():
+    # Arrange
+    js = COMPASS_SEARCH_JS.read_text()
+    css = (COMPASS_CSS_DIR / "_search.css").read_text()
+    # Act
+    action_in_js = "Build citation graph" in js
+    styled = ".search-result__graph-btn" in css
+    # Assert
+    assert action_in_js and styled
+
+
+def test_search_input_has_a_44px_touch_target():
+    # Arrange
+    forms_css = (COMPASS_CSS_DIR / "_forms.css").read_text()
+    # Act
+    # Token with a 44px fallback: accessible now, grows with scitex-ui when --input-height lands.
+    has_target = "min-height: var(--input-height, 44px)" in forms_css
+    # Assert
+    assert has_target
+
+
 # EOF
