@@ -1103,10 +1103,12 @@ def test_placeholder_tabs_share_the_stable_container():
     # Arrange
     tpl = COMPASS_TEMPLATE.read_text()
     # Act
-    stable = all(
-        tpl.rindex("citation-graph-container", 0, tpl.index(f'id="{tab_id}"') + 400)
-        < tpl.index("tab-placeholder", tpl.index(f'id="{tab_id}"'))
-        for tab_id in ("tab-library", "tab-enrichment")
+    # Only the Library tab is still a placeholder (Enrichment was removed, TODO 105),
+    # so only it is checked here; it must share the content tabs' container so
+    # switching Search<->Library does not shift the layout.
+    stable = (
+        tpl.rindex("citation-graph-container", 0, tpl.index('id="tab-library"') + 400)
+        < tpl.index("tab-placeholder", tpl.index('id="tab-library"'))
     )
     # Assert
     assert stable
@@ -1163,6 +1165,70 @@ def test_search_description_clarifies_external_databases_not_library():
     contrasts_library = "not your Library" in body
     # Assert
     assert names_external and contrasts_library
+
+
+# --- TODO 105 / L337: Metadata Enrichment is no longer a top-level tab -------
+#
+# Small operations must not be promoted to top-level navigation; enrichment
+# moves inside the Library surface (TODO 106, a separate, Library-dependent
+# build). This pins the absence so a future edit that re-adds the tab fails
+# here rather than silently regressing.
+# ---------------------------------------------------------------------------
+
+
+def test_enrichment_is_not_a_top_level_tab():
+    # Arrange
+    body = _compass_index_body()
+    # Act
+    no_button = 'data-tab="enrichment"' not in body
+    no_panel = 'id="tab-enrichment"' not in body
+    no_placeholder_heading = "Metadata Enrichment" not in body
+    # Assert
+    assert no_button and no_panel and no_placeholder_heading
+
+
+def test_scholar_tab_bar_has_exactly_three_tabs():
+    # Arrange
+    body = _compass_index_body()
+    # Act
+    tab_count = body.count('class="tab-btn')
+    # Assert
+    assert tab_count == 3
+
+
+# --- responsive fix (MONITOR-1731): shell side panes + mobile collapse -------
+#
+# The scitex-ui workspace shell renders Console/Files/Viewer side panes around
+# the app content. Scholar has no content for them; leaving them enabled
+# produced the empty desktop left gutter and the broken mobile reflow (the
+# shell reflows its panes, which then collide with scholar's own two-column
+# .app-container). The fix has two halves: declare the panes unused in
+# views.index, and collapse scholar's .app-container to one column below 768px.
+# ---------------------------------------------------------------------------
+
+
+def test_index_declares_shell_side_panes_unused():
+    # Arrange
+    from scitex_scholar._django.views import index
+
+    # Act
+    rendered = index(RequestFactory().get("/")).content.decode()
+    # The unused panes carry the shell's `ws-pane-unused` class; all three
+    # (AI/Console, Files, Viewer) must be present so the shell hides them.
+    declares_unused = rendered.count("ws-pane-unused") >= 3
+    # Assert
+    assert declares_unused
+
+
+def test_layout_css_collapses_to_one_column_on_mobile():
+    # Arrange
+    layout_css = (COMPASS_CSS_DIR / "_layout.css").read_text()
+    # Act
+    has_breakpoint = "@media (max-width: 768px)" in layout_css
+    stacks_container = ".app-container" in layout_css and "flex-direction: column" in layout_css
+    hides_sidebar = ".app-sidebar" in layout_css and "display: none" in layout_css
+    # Assert
+    assert has_breakpoint and stacks_container and hides_sidebar
 
 
 # EOF

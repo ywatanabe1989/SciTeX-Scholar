@@ -18,17 +18,31 @@ this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   (wired to the existing `/api/search?no_cache=` / `mode=` params), and the
   CrossRef API status moved out of the always-visible sidebar into a collapsed
   "Advanced" section in the Search tab, so a first-time user sees a keyword box
-  instead of a raw endpoint. Placeholder tabs (Library, Enrichment) now share
-  the same container as the content tabs so switching does not shift the
-  layout, and each search result with a DOI offers a quiet "Build citation
-  graph" action that prefills the Graph tab — a graph can be started from a
-  search result rather than only via the top-level tab.
+  instead of a raw endpoint. The Library placeholder tab now shares the same
+  container as the content tabs so switching does not shift the layout, and each
+  search result with a DOI offers a quiet "Build citation graph" action that
+  prefills the Graph tab — a graph can be started from a search result rather
+  than only via the top-level tab.
 - **The Search surface now says where it searches** (compass 2026-09-10,
   TODO 115/116). The tab and submit button read "Search databases" and the
   description names the external databases (OpenAlex, Crossref, PubMed,
   Semantic Scholar) and states it searches external databases, not the
   Library — so a user is not left guessing that the (not-yet-built) Library
   is the default target.
+- **Metadata Enrichment is no longer a top-level tab** (compass 2026-09-10,
+  TODO 105). Small operations should not be promoted to top-level navigation;
+  the Enrichment tab and its "Coming in Phase 4" placeholder are removed,
+  leaving the standalone GUI with three tabs (Search, Library, Citation
+  Graph). Enrichment actions will live inside the Library surface (TODO 106,
+  a separate build) rather than as their own tab.
+- **The standalone shell no longer reserves empty side panes** (compass
+  2026-09-10, responsive fix). `views.index` now declares the shell's
+  Console/Files/Viewer panes unused, so a standalone Scholar page renders
+  full-width instead of beside a large empty gutter (the gutter is the
+  scitex-ui workspace shell's side panes, which Scholar has no content for).
+  A `<768px` media query collapses Scholar's two-column `.app-container`
+  (sidebar + main) to a single stacked column so the page is usable at mobile
+  width rather than overflowing.
 
 ## [1.11.0] - 2026-09-07
 

@@ -263,6 +263,15 @@ def index(request):
             "api_url": resolved_api or "Not configured",
             "stx_mount": mount_prefix(request),
             "app_label": _app_label("SciTeX Scholar"),
+            # The scitex-ui workspace shell renders three side panes
+            # (Console/Chat, Files, Viewer) around the app content. Scholar
+            # has no content for them, and because the template extends the
+            # shell directly (it is not a built SPA shell the SDK wraps) they
+            # would otherwise render empty — the large left gutter on desktop
+            # and the broken reflow on mobile. Declare them unused so the
+            # shell hides them and Scholar is the whole page. This is the
+            # shell's documented contract ("panes ... DECLARED by the app").
+            "panes": {"ai": "unused", "files": "unused", "viewer": "unused"},
         },
         request=request,
     )

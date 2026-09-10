@@ -97,3 +97,27 @@
  * now all share the same outer padding wrapper, so elements do not jump
  * horizontally when the active tab changes.
  */
+
+/*
+ * Responsive: below 768px the 240px fixed sidebar and the content column
+ * together exceed the viewport, so the two-column `.app-container` overflows
+ * horizontally and the shell's reflow pushes the app header out of place.
+ * Stack to a single column at that width. The sidebar carries only
+ * non-essential state (Service Status, the graph-control key hints) and the
+ * CrossRef status is already surfaced in the Search tab's Advanced section,
+ * so hiding it on a narrow screen loses no actionable information. This
+ * mirrors the shell's own 768px mobile breakpoint (scitex-ui mobile.css).
+ */
+@media (max-width: 768px) {
+  .app-container {
+    flex-direction: column;
+  }
+  .app-sidebar {
+    width: 100%;
+    flex-shrink: 1;
+    display: none;
+  }
+  .app-main {
+    overflow-y: auto;
+  }
+}
