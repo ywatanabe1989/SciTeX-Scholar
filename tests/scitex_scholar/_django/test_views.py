@@ -1236,4 +1236,17 @@ def test_layout_css_collapses_to_one_column_on_mobile():
     assert has_breakpoint and stacks_container and hides_sidebar
 
 
+def test_search_form_row_stacks_on_mobile():
+    # Arrange
+    # #93: a larger search input makes the input + button + results row overflow
+    # a 390px viewport, so the row must stack vertically below the breakpoint.
+    layout_css = (COMPASS_CSS_DIR / "_layout.css").read_text()
+    # Act
+    in_mobile_block = "@media (max-width: 768px)" in layout_css
+    stacks_form_row = ".form-row" in layout_css and "flex-direction: column" in layout_css
+    input_can_shrink = "min-width: 0" in layout_css
+    # Assert
+    assert in_mobile_block and stacks_form_row and input_can_shrink
+
+
 # EOF

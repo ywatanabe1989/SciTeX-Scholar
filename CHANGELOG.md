@@ -19,7 +19,9 @@ this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   exactly the "hardcoded cross-app styling" #93 asked to avoid. The token keeps
   the input larger than the standard control and the existing 44px+ touch
   target, and stays consistent whether the app is served standalone or mounted
-  in the hub.
+  in the hub. On a 390px viewport the larger input made the input + button +
+  results row overflow (button clipped at the right edge), so below 768px the
+  search form row stacks vertically and the flex input is allowed to shrink.
 - **The standalone GUI is search-first, and backend API infrastructure is no
   longer the default researcher view** (compass 2026-09-10, L303/L653/L316/
   L345). The Search tab is now the default (was: Citation Graph); the paper
