@@ -52,6 +52,14 @@
 
 .form-input {
   flex: 1;
+  /*
+   * Touch-target minimum (WCAG 2.5.5 / Apple HIG 44px). Uses the shared
+   * scitex-ui `--input-height` token when it lands (compass-impl-scitex-ui-
+   * 20260910, in parallel); the 44px fallback keeps the target accessible
+   * until the upstream token is merged. Do NOT replace the fallback with a
+   * raw px value once the token exists -- that would re-shadow scitex-ui.
+   */
+  min-height: var(--input-height, 44px);
 }
 
 .form-input:focus,

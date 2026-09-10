@@ -25,6 +25,13 @@ of those repeated here would either duplicate or fight the shell.
 
 KEPT deliberately: the stx-mount marker below. The shell does NOT emit it
 (checked), so the mount contract remains scholar's to declare.
+
+COMPASS 2026-09-10 (search-first researcher experience): the DEFAULT tab is now
+Search, not Citation Graph. Search is the primary action; the advanced query
+syntax, the search source (mode), the "Ignore cache" control, and the
+CrossRef API status moved OUT of the always-visible sidebar into a collapsed
+"Advanced" section so a first-time researcher sees a keyword box, not backend
+API infrastructure.
 {% endcomment %}
 
 {% block extra_css %}
@@ -73,10 +80,10 @@ KEPT deliberately: the stx-mount marker below. The shell does NOT emit it
                         </div>
                     </div>
                 </div>
-                <!-- Controls -->
-                <div class="sidebar-section">
+                <!-- Controls (graph interaction, shown only while the Graph tab is active) -->
+                <div class="sidebar-section graph-controls-hint" data-graph-hint>
                     <div class="sidebar-section__header">
-                        <span class="sidebar-section__title">Controls</span>
+                        <span class="sidebar-section__title">Graph Controls</span>
                     </div>
                     <div class="sidebar-section__content"
                          style="font-size: 11px;
@@ -101,38 +108,148 @@ KEPT deliberately: the stx-mount marker below. The shell does NOT emit it
                         </div>
                     </div>
                 </div>
-                <!-- DB Info -->
-                <div class="sidebar-section">
-                    <div class="sidebar-section__header">
-                        <span class="sidebar-section__title">CrossRef API</span>
-                    </div>
-                    <div class="sidebar-section__content"
-                         style="font-size: 11px;
-                                color: var(--text-muted);
-                                word-break: break-all">
-                        {% if api_available %}
-                            <span style="color: var(--accent);">&#9679;</span> Configured
-                            <br>
-                            <small>{{ api_url }}</small>
-                        {% else %}
-                            <span style="color: var(--status-error);">&#9679;</span> Not configured
-                            <br>
-                            <small>No crossref-local endpoint detected</small>
-                        {% endif %}
-                    </div>
-                </div>
+                <!--
+                    The CrossRef API status section was moved into the Search
+                    tab's Advanced section (compass 2026-09-10, L653): backend
+                    API infrastructure is no longer the default researcher view.
+                -->
             </aside>
             <!-- Main Content -->
             <main class="app-main">
-                <!-- Tab Navigation -->
+                <!-- Tab Navigation: Search is the primary, default action. -->
                 <nav class="tab-nav">
-                    <button class="tab-btn active" data-tab="graph">Citation Graph</button>
+                    <button class="tab-btn active" data-tab="search">Search databases</button>
                     <button class="tab-btn" data-tab="library">Library</button>
-                    <button class="tab-btn" data-tab="search">Search</button>
-                    <button class="tab-btn" data-tab="enrichment">Enrichment</button>
+                    <button class="tab-btn" data-tab="graph">Citation Graph</button>
                 </nav>
-                <!-- Citation Graph Tab -->
-                <div id="tab-graph" class="tab-panel active">
+                <!-- Search Tab (default) -->
+                <div id="tab-search" class="tab-panel active">
+                    <div class="citation-graph-container">
+                        <!-- Input Form -->
+                        <div class="graph-card">
+                            <div class="graph-card__header">
+                                <span class="graph-card__title">Search Papers</span>
+                            </div>
+                            <div class="graph-card__body">
+                                <p class="graph-description">
+                                    Search academic databases (OpenAlex, Crossref, PubMed,
+                                    Semantic Scholar, &#8230;) by keyword. This searches
+                                    <strong>external databases</strong>, not your Library
+                                    (a separate tab).
+                                </p>
+                                <form id="searchForm" class="graph-form">
+                                    <div class="form-row">
+                                        <div class="form-group--doi">
+                                            <label class="form-label" for="searchInput">Query</label>
+                                            <div class="input-wrapper">
+                                                <input type="text"
+                                                       id="searchInput"
+                                                       class="form-input"
+                                                       placeholder="Enter keywords&#8230;">
+                                                <button type="submit" class="btn-build">Search databases</button>
+                                            </div>
+                                        </div>
+                                        <div class="form-group--options">
+                                            <label class="form-label" for="searchMaxResults">Results</label>
+                                            <select id="searchMaxResults" class="form-select">
+                                                <option value="10">10</option>
+                                                <option value="20" selected>20</option>
+                                                <option value="50">50</option>
+                                                <option value="100">100</option>
+                                            </select>
+                                        </div>
+                                    </div>
+                                </form>
+                                <!--
+                                    Advanced: collapsed by default. Houses the
+                                    query-syntax help, the search source (mode),
+                                    the "Ignore cache" control, and the CrossRef
+                                    API status -- things a researcher does not
+                                    need on the first screen (compass L653).
+                                -->
+                                <details class="search-advanced">
+                                    <summary class="search-advanced__summary">Advanced</summary>
+                                    <div class="search-advanced__body">
+                                        <p class="search-advanced__syntax">
+                                            Query syntax:
+                                            <code>-word</code> excludes a term,
+                                            <code>year:2020-2024</code> bounds the
+                                            publication year,
+                                            <code>if:&gt;5</code> filters by impact factor.
+                                        </p>
+                                        <div class="search-advanced__row">
+                                            <label class="form-label" for="searchMode">Search source</label>
+                                            <select id="searchMode" class="form-select">
+                                                <option value="parallel" selected>All sources (parallel)</option>
+                                                <option value="single">Single source</option>
+                                            </select>
+                                        </div>
+                                        <div class="search-advanced__row">
+                                            <label class="search-advanced__check">
+                                                <input type="checkbox" id="searchNoCache">
+                                                Ignore cache
+                                            </label>
+                                        </div>
+                                        <div class="search-advanced__row search-advanced__api">
+                                            <span class="form-label">CrossRef API</span>
+                                            {% if api_available %}
+                                                <span style="color: var(--accent);">&#9679;</span> Configured
+                                                <br>
+                                                <small style="word-break: break-all;">{{ api_url }}</small>
+                                            {% else %}
+                                                <span style="color: var(--status-error);">&#9679;</span> Not configured
+                                                <br>
+                                                <small>No crossref-local endpoint detected</small>
+                                            {% endif %}
+                                        </div>
+                                    </div>
+                                </details>
+                            </div>
+                        </div>
+                        <!-- Loading -->
+                        <div id="searchLoading" class="graph-loading hidden">
+                            <div class="loading-spinner">
+                                <div class="spinner-ring"></div>
+                                <div class="spinner-ring"></div>
+                                <div class="spinner-ring"></div>
+                            </div>
+                            <div class="loading-text">Searching databases... This may take a moment.</div>
+                        </div>
+                        <!-- Error -->
+                        <div id="searchError" class="graph-error hidden">
+                            <p id="searchErrorMessage">An error occurred</p>
+                            <button class="btn-build"
+                                    onclick="document.getElementById('searchError').classList.add('hidden')">
+                                Dismiss
+                            </button>
+                        </div>
+                        <!-- Results -->
+                        <div id="searchResults" class="hidden related-papers-section">
+                            <div class="graph-card">
+                                <div class="graph-card__header">
+                                    <span class="graph-card__title">
+                                        Results
+                                        <small id="searchStats" class="card-subtitle"></small>
+                                    </span>
+                                </div>
+                                <div class="graph-card__body" id="searchResultsContent"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <!-- Library Tab (placeholder) -->
+                <div id="tab-library" class="tab-panel">
+                    <div class="citation-graph-container">
+                        <div class="tab-placeholder">
+                            <div>
+                                <h3>Library</h3>
+                                <p>Zotero-style paper management. Coming in Phase 2.</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <!-- Citation Graph Tab (demoted: no longer the default) -->
+                <div id="tab-graph" class="tab-panel">
                     <div class="citation-graph-container">
                         <!-- Input Form -->
                         <div class="graph-card">
@@ -218,94 +335,6 @@ KEPT deliberately: the stx-mount marker below. The shell does NOT emit it
                                 </div>
                                 <div class="graph-card__body" id="relatedPapersContent"></div>
                             </div>
-                        </div>
-                    </div>
-                </div>
-                <!-- Library Tab (placeholder) -->
-                <div id="tab-library" class="tab-panel">
-                    <div class="tab-placeholder">
-                        <div>
-                            <h3>Library</h3>
-                            <p>Zotero-style paper management. Coming in Phase 2.</p>
-                        </div>
-                    </div>
-                </div>
-                <!-- Search Tab -->
-                <div id="tab-search" class="tab-panel">
-                    <div class="citation-graph-container">
-                        <!-- Input Form -->
-                        <div class="graph-card">
-                            <div class="graph-card__header">
-                                <span class="graph-card__title">Search Papers</span>
-                            </div>
-                            <div class="graph-card__body">
-                                <p class="graph-description">
-                                    Search the configured academic databases. Supports advanced syntax:
-                                    <code>-word</code> excludes a term, <code>year:2020-2024</code> bounds
-                                    the publication year, <code>if:&gt;5</code> filters by impact factor.
-                                </p>
-                                <form id="searchForm" class="graph-form">
-                                    <div class="form-row">
-                                        <div class="form-group--doi">
-                                            <label class="form-label" for="searchInput">Query</label>
-                                            <div class="input-wrapper">
-                                                <input type="text"
-                                                       id="searchInput"
-                                                       class="form-input"
-                                                       placeholder="e.g. hippocampus sharp wave -seizure year:2020-2024">
-                                                <button type="submit" class="btn-build">Search</button>
-                                            </div>
-                                        </div>
-                                        <div class="form-group--options">
-                                            <label class="form-label" for="searchMaxResults">Results</label>
-                                            <select id="searchMaxResults" class="form-select">
-                                                <option value="10">10</option>
-                                                <option value="20" selected>20</option>
-                                                <option value="50">50</option>
-                                                <option value="100">100</option>
-                                            </select>
-                                        </div>
-                                    </div>
-                                </form>
-                            </div>
-                        </div>
-                        <!-- Loading -->
-                        <div id="searchLoading" class="graph-loading hidden">
-                            <div class="loading-spinner">
-                                <div class="spinner-ring"></div>
-                                <div class="spinner-ring"></div>
-                                <div class="spinner-ring"></div>
-                            </div>
-                            <div class="loading-text">Searching databases... This may take a moment.</div>
-                        </div>
-                        <!-- Error -->
-                        <div id="searchError" class="graph-error hidden">
-                            <p id="searchErrorMessage">An error occurred</p>
-                            <button class="btn-build"
-                                    onclick="document.getElementById('searchError').classList.add('hidden')">
-                                Dismiss
-                            </button>
-                        </div>
-                        <!-- Results -->
-                        <div id="searchResults" class="hidden related-papers-section">
-                            <div class="graph-card">
-                                <div class="graph-card__header">
-                                    <span class="graph-card__title">
-                                        Results
-                                        <small id="searchStats" class="card-subtitle"></small>
-                                    </span>
-                                </div>
-                                <div class="graph-card__body" id="searchResultsContent"></div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-                <!-- Enrichment Tab (placeholder) -->
-                <div id="tab-enrichment" class="tab-panel">
-                    <div class="tab-placeholder">
-                        <div>
-                            <h3>Metadata Enrichment</h3>
-                            <p>Enrich BibTeX with abstracts, citations, and impact factors. Coming in Phase 4.</p>
                         </div>
                     </div>
                 </div>

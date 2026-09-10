@@ -1009,4 +1009,226 @@ def test_host_subprocess_inherits_an_existing_pythonpath(tmp_path):
     assert result.returncode == 0, result.stderr[-800:]
 
 
+# ---------------------------------------------------------------------------
+# Compass 2026-09-10, Scholar search-UX structure.
+#
+# Regression guards for the search-first rework of the standalone Django GUI
+# (compass-impl-scitex-scholar-20260910). They assert STRUCTURE, not pixels:
+# render the template via views.index or read the shipped CSS/JS directly and
+# pin the DOM the page ships, so a future edit that reintroduces the old
+# layout fails here. One assertion per test, AAA-marked, matching this file's
+# convention (and the PA-307 §3 audit rule).
+#
+#   L303 Search is the primary, default tab; 44px touch target on the input.
+#   L653 Advanced query syntax collapsed; cache + source + CrossRef status out
+#        of the always-visible sidebar into a collapsed "Advanced" section.
+#   L316 Placeholder tabs share the same container as content tabs (no jump).
+#   L345 Each search result with a DOI offers "Build citation graph".
+# ---------------------------------------------------------------------------
+
+COMPASS_CSS_DIR = Path(views.__file__).parent / "static" / "scholar" / "css" / "_partials"
+COMPASS_SEARCH_JS = Path(views.__file__).parent / "static" / "scholar" / "js" / "search.js"
+COMPASS_TEMPLATE = TEMPLATE
+
+
+def _compass_index_body() -> str:
+    """Render the standalone index; the browser's HTML is the thing under test."""
+    return views.index(RequestFactory().get("/")).content.decode()
+
+
+def test_search_is_the_default_active_tab():
+    # Arrange
+    body = _compass_index_body()
+    # Act
+    search_default = 'class="tab-btn active" data-tab="search"' in body
+    search_panel_active = 'id="tab-search" class="tab-panel active"' in body
+    # Assert
+    assert search_default and search_panel_active
+
+
+def test_graph_tab_is_not_default_but_still_present():
+    # Arrange
+    body = _compass_index_body()
+    # Act
+    graph_present = 'data-tab="graph"' in body
+    graph_not_default = 'class="tab-btn active" data-tab="graph"' not in body
+    graph_panel_not_active = 'id="tab-graph" class="tab-panel active"' not in body
+    # Assert
+    assert graph_present and graph_not_default and graph_panel_not_active
+
+
+def test_advanced_section_is_collapsed_by_default():
+    # Arrange
+    body = _compass_index_body()
+    # Act
+    present = "search-advanced" in body
+    closed_on_load = '<details class="search-advanced">' in body  # no open attr
+    # Assert
+    assert present and closed_on_load
+
+
+def test_advanced_hides_query_syntax_until_requested():
+    # Arrange
+    body = _compass_index_body()
+    # Act
+    syntax_block = "search-advanced__syntax" in body
+    impact_factor_syntax = "if:&gt;5" in body  # escaped in the template
+    # Assert
+    assert syntax_block and impact_factor_syntax
+
+
+def test_ignore_cache_and_source_are_wired_to_the_api():
+    # Arrange
+    body = _compass_index_body()
+    js = COMPASS_SEARCH_JS.read_text()
+    # Act
+    checkbox_present = 'id="searchNoCache"' in body
+    forwards_no_cache = 'params.set("no_cache", "true")' in js
+    forwards_mode = 'params.set("mode", modeSelect.value)' in js
+    # Assert
+    assert checkbox_present and forwards_no_cache and forwards_mode
+
+
+def test_crossref_api_status_moved_out_of_the_sidebar():
+    # Arrange
+    body = _compass_index_body()
+    # Act
+    in_advanced = "search-advanced__api" in body
+    not_a_sidebar_section = 'sidebar-section__title">CrossRef API</span>' not in body
+    # Assert
+    assert in_advanced and not_a_sidebar_section
+
+
+def test_placeholder_tabs_share_the_stable_container():
+    # Arrange
+    tpl = COMPASS_TEMPLATE.read_text()
+    # Act
+    # Only the Library tab is still a placeholder (Enrichment was removed, TODO 105),
+    # so only it is checked here; it must share the content tabs' container so
+    # switching Search<->Library does not shift the layout.
+    stable = (
+        tpl.rindex("citation-graph-container", 0, tpl.index('id="tab-library"') + 400)
+        < tpl.index("tab-placeholder", tpl.index('id="tab-library"'))
+    )
+    # Assert
+    assert stable
+
+
+def test_search_results_offer_build_citation_graph():
+    # Arrange
+    js = COMPASS_SEARCH_JS.read_text()
+    css = (COMPASS_CSS_DIR / "_search.css").read_text()
+    # Act
+    action_in_js = "Build citation graph" in js
+    styled = ".search-result__graph-btn" in css
+    # Assert
+    assert action_in_js and styled
+
+
+def test_search_input_has_a_44px_touch_target():
+    # Arrange
+    forms_css = (COMPASS_CSS_DIR / "_forms.css").read_text()
+    # Act
+    # Token with a 44px fallback: accessible now, grows with scitex-ui when --input-height lands.
+    has_target = "min-height: var(--input-height, 44px)" in forms_css
+    # Assert
+    assert has_target
+
+
+# --- item 116/115/114: "Search" must say WHERE it searches ------------------
+#
+# Compass 2026-09-10: a bare "Search" label does not tell a researcher whether
+# they are querying the external databases or their own library -- and the
+# library does not exist yet. The tab and the submit button now read
+# "Search databases" and the description names the external databases and
+# contrasts them with the Library tab.
+# ---------------------------------------------------------------------------
+
+
+def test_search_tab_and_button_are_labelled_databases():
+    # Arrange
+    body = _compass_index_body()
+    # Act
+    tab_label = 'class="tab-btn active" data-tab="search">Search databases<' in body
+    button_label = 'class="btn-build">Search databases<' in body
+    # Assert
+    assert tab_label and button_label
+
+
+def test_search_description_clarifies_external_databases_not_library():
+    # Arrange
+    body = _compass_index_body()
+    # Act
+    # The description must both name the external databases and contrast them
+    # with the Library so the two surfaces are not confused.
+    names_external = "external databases" in body
+    contrasts_library = "not your Library" in body
+    # Assert
+    assert names_external and contrasts_library
+
+
+# --- TODO 105 / L337: Metadata Enrichment is no longer a top-level tab -------
+#
+# Small operations must not be promoted to top-level navigation; enrichment
+# moves inside the Library surface (TODO 106, a separate, Library-dependent
+# build). This pins the absence so a future edit that re-adds the tab fails
+# here rather than silently regressing.
+# ---------------------------------------------------------------------------
+
+
+def test_enrichment_is_not_a_top_level_tab():
+    # Arrange
+    body = _compass_index_body()
+    # Act
+    no_button = 'data-tab="enrichment"' not in body
+    no_panel = 'id="tab-enrichment"' not in body
+    no_placeholder_heading = "Metadata Enrichment" not in body
+    # Assert
+    assert no_button and no_panel and no_placeholder_heading
+
+
+def test_scholar_tab_bar_has_exactly_three_tabs():
+    # Arrange
+    body = _compass_index_body()
+    # Act
+    tab_count = body.count('class="tab-btn')
+    # Assert
+    assert tab_count == 3
+
+
+# --- responsive fix (MONITOR-1731): shell side panes + mobile collapse -------
+#
+# The scitex-ui workspace shell renders Console/Files/Viewer side panes around
+# the app content. Scholar has no content for them; leaving them enabled
+# produced the empty desktop left gutter and the broken mobile reflow (the
+# shell reflows its panes, which then collide with scholar's own two-column
+# .app-container). The fix has two halves: declare the panes unused in
+# views.index, and collapse scholar's .app-container to one column below 768px.
+# ---------------------------------------------------------------------------
+
+
+def test_index_declares_shell_side_panes_unused():
+    # Arrange
+    from scitex_scholar._django.views import index
+
+    # Act
+    rendered = index(RequestFactory().get("/")).content.decode()
+    # The unused panes carry the shell's `ws-pane-unused` class; all three
+    # (AI/Console, Files, Viewer) must be present so the shell hides them.
+    declares_unused = rendered.count("ws-pane-unused") >= 3
+    # Assert
+    assert declares_unused
+
+
+def test_layout_css_collapses_to_one_column_on_mobile():
+    # Arrange
+    layout_css = (COMPASS_CSS_DIR / "_layout.css").read_text()
+    # Act
+    has_breakpoint = "@media (max-width: 768px)" in layout_css
+    stacks_container = ".app-container" in layout_css and "flex-direction: column" in layout_css
+    hides_sidebar = ".app-sidebar" in layout_css and "display: none" in layout_css
+    # Assert
+    assert has_breakpoint and stacks_container and hides_sidebar
+
+
 # EOF
