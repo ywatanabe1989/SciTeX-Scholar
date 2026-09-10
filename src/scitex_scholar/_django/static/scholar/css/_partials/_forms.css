@@ -53,13 +53,16 @@
 .form-input {
   flex: 1;
   /*
-   * Touch-target minimum (WCAG 2.5.5 / Apple HIG 44px). Uses the shared
-   * scitex-ui `--input-height` token when it lands (compass-impl-scitex-ui-
-   * 20260910, in parallel); the 44px fallback keeps the target accessible
-   * until the upstream token is merged. Do NOT replace the fallback with a
-   * raw px value once the token exists -- that would re-shadow scitex-ui.
+   * #93 (compass 2026-09-11): the database-search input is the primary
+   * control, so it is sized up via the scholar-owned --scholar-search-height
+   * token (48px == scitex-ui --spacing-xxl, larger than the 36px standard).
+   * No raw px here and no fallback to an unlinked scitex-ui token: the
+   * standalone route does not load primitives/spacing.css, so
+   * var(--input-height, <px>) would be a silent hardcode. The token is
+   * declared in _base.css (always linked) and is larger than the touch
+   * minimum, so the target is accessible AND reads as the primary action.
    */
-  min-height: var(--input-height, 44px);
+  min-height: var(--scholar-search-height);
 }
 
 .form-input:focus,

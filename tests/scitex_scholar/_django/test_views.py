@@ -1128,11 +1128,16 @@ def test_search_results_offer_build_citation_graph():
 def test_search_input_has_a_44px_touch_target():
     # Arrange
     forms_css = (COMPASS_CSS_DIR / "_forms.css").read_text()
+    base_css = (COMPASS_CSS_DIR / "_base.css").read_text()
     # Act
-    # Token with a 44px fallback: accessible now, grows with scitex-ui when --input-height lands.
-    has_target = "min-height: var(--input-height, 44px)" in forms_css
+    # #93: the search input is sized via a scholar-owned token (declared in
+    # _base.css, always linked) rather than a raw px or an unlinked scitex-ui
+    # --input-height fallback. The token must be declared AND referenced.
+    token_declared = "--scholar-search-height" in base_css
+    token_referenced = "min-height: var(--scholar-search-height)" in forms_css
+    no_raw_fallback = "var(--input-height, 44px)" not in forms_css
     # Assert
-    assert has_target
+    assert token_declared and token_referenced and no_raw_fallback
 
 
 # --- item 116/115/114: "Search" must say WHERE it searches ------------------
