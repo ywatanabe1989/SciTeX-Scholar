@@ -237,13 +237,40 @@ API infrastructure.
                         </div>
                     </div>
                 </div>
-                <!-- Library Tab (placeholder) -->
+                <!-- Library Tab: the user's local library, listed here with a
+                     contextual (per-paper) Enrichment action. Enrichment is an
+                     operation ON a library item (#106), not a top-level tab
+                     (#105 kept it off the nav). -->
                 <div id="tab-library" class="tab-panel">
                     <div class="citation-graph-container">
-                        <div class="tab-placeholder">
-                            <div>
-                                <h3>Library</h3>
-                                <p>Zotero-style paper management. Coming in Phase 2.</p>
+                        <div class="graph-card">
+                            <div class="graph-card__header">
+                                <span class="graph-card__title">Library</span>
+                                <small id="libraryStats" class="card-subtitle"></small>
+                            </div>
+                            <div class="graph-card__body">
+                                <p class="graph-description">
+                                    Your papers, stored locally. Select a paper and use
+                                    <strong>Enrich</strong> to fill in metadata
+                                    (abstract, citations, impact factor) from the
+                                    databases.
+                                </p>
+                                <div id="libraryLoading" class="graph-loading hidden">
+                                    <div class="loading-spinner">
+                                        <div class="spinner-ring"></div>
+                                        <div class="spinner-ring"></div>
+                                        <div class="spinner-ring"></div>
+                                    </div>
+                                    <div class="loading-text">Loading your library...</div>
+                                </div>
+                                <div id="libraryError" class="graph-error hidden">
+                                    <p id="libraryErrorMessage">An error occurred</p>
+                                    <button class="btn-build"
+                                            onclick="document.getElementById('libraryError').classList.add('hidden')">
+                                        Dismiss
+                                    </button>
+                                </div>
+                                <div id="libraryList" class="library-list"></div>
                             </div>
                         </div>
                     </div>
@@ -348,6 +375,7 @@ API infrastructure.
         <script src="{% static 'scholar/js/stx-mount.js' %}"></script>
         <script src="{% static 'scholar/js/app.js' %}"></script>
 <script src="{% static 'scholar/js/search.js' %}"></script>
+        <script src="{% static 'scholar/js/library.js' %}"></script>
         <script src="{% static 'scholar/js/graph/ForceSimulation.js' %}"></script>
         <script src="{% static 'scholar/js/graph/GraphRenderer.js' %}"></script>
         <script src="{% static 'scholar/js/graph/citation-graph.js' %}"></script>

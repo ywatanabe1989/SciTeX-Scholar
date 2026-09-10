@@ -7,6 +7,22 @@ this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+- **Metadata enrichment is now a contextual Library operation** (product
+  compass #106). The Library tab lists the user's local library and each paper
+  row carries an **Enrich** action, instead of enrichment being a top-level tab
+  (#105 removed it). Two new API routes back it, both thin adapters over the
+  package's own storage + enrichment layer (the same code the `library` CLI
+  drives): `GET /api/library` lists the user's MASTER metadata files directly
+  (file-scoped, so it is always the calling user's local library and never a
+  shared store), and `POST /api/library/enrich` runs
+  `ScholarPipelineMetadataSingle.enrich_paper_async` on one paper and writes the
+  enriched metadata (abstract, citations, impact factor) back to the same
+  per-user record. No account is required — standalone user scope is the local
+  `~/.scitex/scholar/library`, per the 2026-09-02 "standalone works without an
+  account; the local library is the default" constraint. The tab bar is
+  unchanged (Search databases / Library / Citation Graph).
+
 ### Changed
 - **The Scholar database-search input is larger and visually primary** (product
   compass #93). The input height is now driven by a scholar-owned
