@@ -1114,6 +1114,32 @@ def test_placeholder_tabs_share_the_stable_container():
     assert stable
 
 
+def test_search_and_library_content_share_one_container_class():
+    # Arrange
+    # #101: "keep primary content/header geometry stable when moving between
+    # Search and Library." The two tabs render different inner content (a
+    # search form vs a centered placeholder), but they must be inset by the
+    # SAME wrapper so their left edge, width and top origin match. That is what
+    # the real browser measured (search card and library placeholder both at
+    # x=256/w=1168 desktop, x=16/w=358 mobile) — both are children of a
+    # .citation-graph-container. This pins that shared-wrapper contract for
+    # BOTH tabs, not just the placeholder.
+    tpl = COMPASS_TEMPLATE.read_text()
+    # Act
+    def _panel_wraps_container(panel_id: str) -> bool:
+        start = tpl.index(f'id="{panel_id}"')
+        # next panel boundary (or end of file)
+        nxt = [tpl.index(f'id="tab-{t}"') for t in ("search", "library", "graph")
+               if f'id="tab-{t}"' != panel_id and tpl.find(f'id="tab-{t}"') > start]
+        end = min(nxt) if nxt else len(tpl)
+        region = tpl[start:end]
+        return "citation-graph-container" in region
+    search_wraps = _panel_wraps_container('tab-search')
+    library_wraps = _panel_wraps_container('tab-library')
+    # Assert
+    assert search_wraps and library_wraps
+
+
 def test_search_results_offer_build_citation_graph():
     # Arrange
     js = COMPASS_SEARCH_JS.read_text()
