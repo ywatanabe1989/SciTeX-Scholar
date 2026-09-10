@@ -7,6 +7,29 @@ this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed
+- **The standalone GUI is search-first, and backend API infrastructure is no
+  longer the default researcher view** (compass 2026-09-10, L303/L653/L316/
+  L345). The Search tab is now the default (was: Citation Graph); the paper
+  search input and the tab bar carry a 44px touch-target minimum, keyed to the
+  shared scitex-ui `--input-height` token with a `44px` fallback so the target
+  is accessible now and grows with the upstream token when it merges.
+  Advanced query syntax, the search source (mode), the "Ignore cache" control
+  (wired to the existing `/api/search?no_cache=` / `mode=` params), and the
+  CrossRef API status moved out of the always-visible sidebar into a collapsed
+  "Advanced" section in the Search tab, so a first-time user sees a keyword box
+  instead of a raw endpoint. Placeholder tabs (Library, Enrichment) now share
+  the same container as the content tabs so switching does not shift the
+  layout, and each search result with a DOI offers a quiet "Build citation
+  graph" action that prefills the Graph tab — a graph can be started from a
+  search result rather than only via the top-level tab.
+- **The Search surface now says where it searches** (compass 2026-09-10,
+  TODO 115/116). The tab and submit button read "Search databases" and the
+  description names the external databases (OpenAlex, Crossref, PubMed,
+  Semantic Scholar) and states it searches external databases, not the
+  Library — so a user is not left guessing that the (not-yet-built) Library
+  is the default target.
+
 ## [1.11.0] - 2026-09-07
 
 ### Added

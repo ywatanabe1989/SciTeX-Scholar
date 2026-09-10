@@ -43,6 +43,7 @@
   flex: 1;
   overflow-y: auto;
   padding: 0;
+  min-width: 0; /* prevents flex child overflow from shifting the tab bar */
 }
 
 /* ── Tabs ──────────────────────────────────────────────────── */
@@ -54,6 +55,12 @@
 }
 
 .tab-btn {
+  /*
+   * Touch-target minimum on the tab bar (compass L303 / WCAG 2.5.5).
+   * Same token as the search input so the whole UI grows together when
+   * scitex-ui merges --input-height.
+   */
+  min-height: var(--input-height, 44px);
   padding: 12px 20px;
   background: none;
   border: none;
@@ -62,6 +69,8 @@
   font-size: 13px;
   font-weight: 500;
   cursor: pointer;
+  display: inline-flex;
+  align-items: center;
   transition:
     color 0.15s,
     border-color 0.15s;
@@ -81,3 +90,10 @@
 .tab-panel.active {
   display: block;
 }
+
+/*
+ * L316 (compass 2026-09-10): keep the layout stable when switching between
+ * tabs. The tab-panel containers (citation-graph-container, tab-placeholder)
+ * now all share the same outer padding wrapper, so elements do not jump
+ * horizontally when the active tab changes.
+ */
