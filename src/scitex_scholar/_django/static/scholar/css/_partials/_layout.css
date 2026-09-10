@@ -120,4 +120,23 @@
   .app-main {
     overflow-y: auto;
   }
+  /*
+   * #93: the search input is now larger, so on a 390px viewport the
+   * input + "Search databases" button + results select no longer fit in one
+   * row and the button was clipped at the right edge. Stack the form groups
+   * vertically and let the flex input shrink below its intrinsic width so the
+   * row never overflows horizontally.
+   */
+  .form-row {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 12px;
+  }
+  .input-wrapper {
+    width: 100%;
+  }
+  .form-input,
+  .form-select {
+    min-width: 0;
+  }
 }

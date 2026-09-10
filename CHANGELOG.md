@@ -8,6 +8,20 @@ this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ## [Unreleased]
 
 ### Changed
+- **The Scholar database-search input is larger and visually primary** (product
+  compass #93). The input height is now driven by a scholar-owned
+  `--scholar-search-height` token (48px == scitex-ui's `--spacing-xxl` step,
+  larger than the 36px `--input-height` standard) declared in the app's own
+  linked CSS. This replaces the earlier `var(--input-height, 44px)`, which on
+  the standalone route silently fell back to a hardcoded 44px because the
+  standalone shell links `scitex_ui/css/shell/*.css` but not
+  `primitives/spacing.css` where `--input-height` is defined — i.e. it was
+  exactly the "hardcoded cross-app styling" #93 asked to avoid. The token keeps
+  the input larger than the standard control and the existing 44px+ touch
+  target, and stays consistent whether the app is served standalone or mounted
+  in the hub. On a 390px viewport the larger input made the input + button +
+  results row overflow (button clipped at the right edge), so below 768px the
+  search form row stacks vertically and the flex input is allowed to shrink.
 - **The standalone GUI is search-first, and backend API infrastructure is no
   longer the default researcher view** (compass 2026-09-10, L303/L653/L316/
   L345). The Search tab is now the default (was: Citation Graph); the paper
