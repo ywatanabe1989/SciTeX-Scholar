@@ -1417,8 +1417,123 @@ def test_library_api_routes_are_registered():
     # Act
     listed = resolve("/api/library").func.__name__
     enriched = resolve("/api/library/enrich").func.__name__
+    exported = resolve("/api/library/export").func.__name__
+    imported = resolve("/api/library/import").func.__name__
     # Assert
-    assert listed == "library_list" and enriched == "library_enrich"
+    assert (
+        listed == "library_list"
+        and enriched == "library_enrich"
+        and exported == "library_export"
+        and imported == "library_import"
+    )
+
+
+# --- #106 / L327: Library Import / Export -----------------------------------
+#
+# Thin adapters over the package's own BibTeX handler + formatter. Export
+# serializes the user's local library (bibtex/ris/endnote); import parses
+# BibTeX and persists it to the same MASTER/<id>/metadata.json the list route
+# reads. Offline: no network, user-scoped via the env-seam temp root.
+# ---------------------------------------------------------------------------
+
+
+_SAMPLE_BIB = (
+    "@article{imp1,\n"
+    " title = {Imported Paper Title},\n"
+    " author = {Jane Importer and John Second},\n"
+    " year = {2022},\n"
+    " journal = {Journal of Imports},\n"
+    " doi = {10.9/imported}\n"
+    "}\n"
+)
+
+
+def test_library_export_bibtex_round_trips_the_library(tmp_path):
+    # Arrange
+    with _library_env(tmp_path):
+        _seed_library(tmp_path, paper_id="XP1", doi="10.2/exported",
+                      title="Exported Paper Title", year=2021)
+        rf = RequestFactory()
+    # Act
+    with _library_env(tmp_path):
+        resp = views.library_export(rf.get("/api/library/export", {"format": "bibtex"}))
+        body = resp.content.decode()
+    # Assert
+    assert resp.status_code == 200 and "Exported Paper Title" in body and "10.2/exported" in body
+
+
+def test_library_export_ris_format(tmp_path):
+    # Arrange
+    with _library_env(tmp_path):
+        _seed_library(tmp_path, paper_id="XR1", doi="10.3/ris",
+                      title="RIS Paper Title", year=2020)
+        rf = RequestFactory()
+    # Act
+    with _library_env(tmp_path):
+        resp = views.library_export(rf.get("/api/library/export", {"format": "ris"}))
+        body = resp.content.decode()
+    # Assert
+    assert resp.status_code == 200 and "RIS Paper Title" in body
+
+
+def test_library_export_rejects_unsupported_format(tmp_path):
+    # Arrange
+    rf = RequestFactory()
+    # Act
+    with _library_env(tmp_path):
+        resp = views.library_export(rf.get("/api/library/export", {"format": "csljson"}))
+    # Assert
+    assert resp.status_code == 400
+
+
+def test_library_import_bibtex_makes_paper_visible(tmp_path):
+    # Arrange
+    with _library_env(tmp_path):
+        rf = RequestFactory()
+        # Act — import a BibTeX entry, then list the library.
+        imported = _json.loads(views.library_import(rf.post(
+            "/api/library/import", {"format": "bibtex", "bibtex": _SAMPLE_BIB}
+        )).content)
+        listed = _json.loads(views.library_list(rf.get("/api/library")).content)
+        titles = [p.get("title") for p in listed["papers"]]
+    # Assert — the imported paper is parsed, persisted, and listed.
+    assert imported["ok"] is True and imported["imported"] == 1 and "Imported Paper Title" in titles
+
+
+def test_library_import_requires_bibtex_body(tmp_path):
+    # Arrange
+    rf = RequestFactory()
+    # Act
+    with _library_env(tmp_path):
+        resp = views.library_import(rf.post("/api/library/import", {"format": "bibtex"}))
+    # Assert
+    assert resp.status_code == 400
+
+
+def test_library_import_rejects_unsupported_format(tmp_path):
+    # Arrange
+    rf = RequestFactory()
+    # Act
+    with _library_env(tmp_path):
+        resp = views.library_import(rf.post("/api/library/import",
+                                            {"format": "ris", "bibtex": _SAMPLE_BIB}))
+    # Assert
+    assert resp.status_code == 400
+
+
+def test_library_template_has_import_export_controls():
+    # Arrange
+    tpl = COMPASS_TEMPLATE.read_text()
+    js = (COMPASS_SEARCH_JS.parent / "library.js").read_text()
+    # Act
+    has_controls = (
+        'id="libraryExportBtn"' in tpl
+        and 'id="libraryImportBtn"' in tpl
+        and 'id="libraryExportFormat"' in tpl
+    )
+    js_wires_both = "api/library/export" in js and "api/library/import" in js
+    # Assert
+    assert has_controls and js_wires_both
 
 
 # EOF

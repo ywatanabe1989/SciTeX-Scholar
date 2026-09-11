@@ -128,8 +128,8 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   }
 
-  async function loadLibrary() {
-    if (loaded) return;
+  async function loadLibrary(force = false) {
+    if (loaded && !force) return;
     hide(errorEl);
     show(loadingEl);
     try {
@@ -155,6 +155,75 @@ document.addEventListener("DOMContentLoaded", () => {
       errorMsgEl.textContent = String(err.message || err);
       show(errorEl);
     }
+  }
+
+  // --- Import / Export (#106 / L327) ----------------------------------------
+  const ioStatus = document.getElementById("libraryIoStatus");
+  function setIoStatus(msg, isErr) {
+    if (!ioStatus) return;
+    ioStatus.textContent = msg;
+    ioStatus.classList.toggle("library-io__status--error", !!isErr);
+  }
+
+  const exportBtn = document.getElementById("libraryExportBtn");
+  if (exportBtn) {
+    exportBtn.addEventListener("click", async () => {
+      const fmt = (document.getElementById("libraryExportFormat") || {}).value || "bibtex";
+      exportBtn.disabled = true;
+      setIoStatus(`Exporting as ${fmt}…`);
+      try {
+        const resp = await fetch(`${STX_MOUNT}/api/library/export?format=${encodeURIComponent(fmt)}`);
+        if (!resp.ok) {
+          const data = await resp.json().catch(() => ({}));
+          throw new Error(data.error || `Export failed (${resp.status})`);
+        }
+        const blob = await resp.blob();
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        const ext = { bibtex: "bib", ris: "ris", endnote: "enw" }[fmt] || "txt";
+        a.href = url;
+        a.download = `scholar-library.${ext}`;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        URL.revokeObjectURL(url);
+        setIoStatus(`Exported library as ${fmt}.`);
+      } catch (err) {
+        setIoStatus(String(err.message || err), true);
+      } finally {
+        exportBtn.disabled = false;
+      }
+    });
+  }
+
+  const importBtn = document.getElementById("libraryImportBtn");
+  const importFile = document.getElementById("libraryImportFile");
+  if (importBtn && importFile) {
+    importBtn.addEventListener("click", () => importFile.click());
+    importFile.addEventListener("change", async () => {
+      const file = importFile.files && importFile.files[0];
+      if (!file) return;
+      importBtn.disabled = true;
+      setIoStatus(`Importing ${file.name}…`);
+      try {
+        const text = await file.text();
+        const params = new URLSearchParams({ format: "bibtex", bibtex: text });
+        const resp = await fetch(`${STX_MOUNT}/api/library/import`, {
+          method: "POST",
+          headers: { "Content-Type": "application/x-www-form-urlencoded" },
+          body: params.toString(),
+        });
+        const data = await resp.json();
+        if (!resp.ok) throw new Error(data.error || `Import failed (${resp.status})`);
+        setIoStatus(`Imported ${data.imported} paper${data.imported === 1 ? "" : "s"} from ${file.name}.`);
+        importFile.value = "";
+        loadLibrary(true); // refresh the list to show the imported papers
+      } catch (err) {
+        setIoStatus(String(err.message || err), true);
+      } finally {
+        importBtn.disabled = false;
+      }
+    });
   }
 
   // Lazy-load the list the first time the Library tab is activated.

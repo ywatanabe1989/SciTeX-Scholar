@@ -664,4 +664,151 @@ def library_enrich(request, _pipeline=None):
         return JsonResponse({"error": f"Enrichment failed: {e}"}, status=500)
 
 
+# ---------------------------------------------------------------------------
+# Library Import / Export (#106 / L327): the Library tab's Import/Export,
+# thin adapters over the package's own BibTeX + formatting layer.
+#
+#   export -> formatting.papers_to_format (bibtex / ris / endnote) over the
+#            user's local library rows (same collect_rows the list view reads)
+#   import -> storage.BibTeXHandler.papers_from_bibtex, persisted to the SAME
+#            MASTER/<paper_id>/metadata.json path the list/enrich routes use,
+#            so an imported paper is immediately visible and enrichable.
+#
+# Format support is reported honestly: the formatter supports bibtex/ris/
+# endnote for EXPORT; BibTeX is the supported IMPORT format (no RIS/CSL-JSON
+# importer exists in the package, so those are not claimed).
+# ---------------------------------------------------------------------------
+
+LIBRARY_EXPORT_FORMATS = ("bibtex", "ris", "endnote")
+LIBRARY_IMPORT_FORMATS = ("bibtex",)
+
+
+def _row_to_formatting_dict(row: dict) -> dict:
+    """Map a library index row to the dict shape papers_to_format expects."""
+    import json as _json
+
+    authors = row.get("authors_json")
+    if authors:
+        try:
+            authors = _json.loads(authors)
+        except (ValueError, TypeError):
+            authors = []
+    return {
+        "title": row.get("title") or "",
+        "authors": authors or [],
+        "year": row.get("year"),
+        "journal": row.get("venue"),
+        "doi": row.get("doi"),
+        "abstract": row.get("abstract"),
+    }
+
+
+@require_GET
+def library_export(request):
+    """Export the user's local library to bibtex / ris / endnote.
+
+    ?format=bibtex|ris|endnote (default bibtex). Streams the serialized
+    library as the response body with the right content type.
+    """
+    fmt = (request.GET.get("format") or "bibtex").strip().lower()
+    if fmt not in LIBRARY_EXPORT_FORMATS:
+        return JsonResponse(
+            {
+                "error": f"Unsupported export format: {fmt}",
+                "supported": list(LIBRARY_EXPORT_FORMATS),
+            },
+            status=400,
+        )
+
+    root = _library_root()
+    from scitex_scholar.formatting import papers_to_format
+    from scitex_scholar.storage import _library_index as idx
+
+    try:
+        rows = idx.collect_rows(root)
+    except FileNotFoundError:
+        rows = []
+    except ValueError as e:
+        return JsonResponse({"error": f"Library inconsistent: {e}"}, status=500)
+
+    try:
+        content = papers_to_format([_row_to_formatting_dict(r) for r in rows], fmt)
+    except Exception as e:
+        logger.error(f"library export ({fmt}) failed: {e}", exc_info=True)
+        return JsonResponse({"error": f"Export failed: {e}"}, status=500)
+
+    content_type = {
+        "bibtex": "application/x-bibtex",
+        "ris": "application/x-research-info-systems",
+        "endnote": "application/x-endnote-references",
+    }[fmt]
+    ext = {"bibtex": "bib", "ris": "ris", "endnote": "enw"}[fmt]
+    resp = HttpResponse(content, content_type=content_type)
+    resp["Content-Disposition"] = f'attachment; filename="scholar-library.{ext}"'
+    return resp
+
+
+def _derived_library_id(paper) -> str:
+    """Stable, dedup-friendly id for an imported paper.
+
+    Reuses an existing library_id; otherwise derives one from the DOI (preferred)
+    or title so re-importing the same paper does not create duplicates.
+    """
+    existing = getattr(paper.container, "library_id", None)
+    if existing:
+        return existing
+    key = paper.metadata.id.doi or paper.metadata.basic.title or ""
+    import hashlib
+
+    return hashlib.sha1(key.encode("utf-8")).hexdigest()[:8].upper()
+
+
+@require_POST
+def library_import(request):
+    """Import BibTeX into the user's local library.
+
+    Body: format=bibtex (default) + bibtex=<bibliography text>. Each entry is
+    parsed by the package's BibTeX handler and persisted to the same
+    MASTER/<paper_id>/metadata.json path the list/enrich routes read, so imported
+    papers are immediately visible and enrichable.
+    """
+    fmt = (request.POST.get("format") or "bibtex").strip().lower()
+    if fmt not in LIBRARY_IMPORT_FORMATS:
+        return JsonResponse(
+            {
+                "error": f"Unsupported import format: {fmt}",
+                "supported": list(LIBRARY_IMPORT_FORMATS),
+            },
+            status=400,
+        )
+    bibtex_text = (request.POST.get("bibtex") or "").strip()
+    if not bibtex_text:
+        return JsonResponse({"error": "bibtex field required"}, status=400)
+
+    root = _library_root()
+    try:
+        # Use the library's configured BibTeX handler (it carries project/
+        # config, which the bare handler lacks -- measured: a no-arg
+        # BibTeXHandler() parses 0 papers, the configured one parses them).
+        from scitex_scholar.storage.ScholarLibrary import ScholarLibrary
+
+        papers = ScholarLibrary(root).papers_from_bibtex(bibtex_text)
+        if not papers:
+            return JsonResponse(
+                {"error": "No papers found in the provided BibTeX", "imported": 0},
+                status=400,
+            )
+
+        imported = []
+        for paper in papers:
+            paper.container.library_id = _derived_library_id(paper)
+            _save_library_paper(paper, root)
+            imported.append(paper.container.library_id)
+
+        return JsonResponse({"ok": True, "imported": len(imported), "paper_ids": imported})
+    except Exception as e:
+        logger.error(f"library import failed: {e}", exc_info=True)
+        return JsonResponse({"error": f"Import failed: {e}"}, status=500)
+
+
 # EOF

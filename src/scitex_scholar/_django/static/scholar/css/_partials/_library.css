@@ -118,3 +118,88 @@
     justify-content: center;
   }
 }
+
+/*
+ * #106 / L327: the Library Import/Export bar. A library-level operation row
+ * (Export format select + button, separator, Import BibTeX button) that sits
+ * above the list. Quiet secondary controls -- the accent primary is reserved
+ * for the Search action. Uses only existing design tokens.
+ */
+.library-io {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  margin-bottom: 12px;
+  border: 1px solid var(--border-default);
+  background: var(--bg-tertiary);
+  border-radius: 4px;
+}
+
+.library-io__label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.library-io__select {
+  max-width: 160px;
+}
+
+.btn-control-library {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 44px;
+  padding: 8px 14px;
+  background: none;
+  border: 1px solid var(--border-default);
+  border-radius: 4px;
+  color: var(--text-secondary);
+  font-size: 13px;
+  cursor: pointer;
+  transition:
+    color 0.15s,
+    border-color 0.15s,
+    background 0.15s;
+}
+.btn-control-library:hover:not(:disabled) {
+  color: var(--accent);
+  border-color: var(--accent);
+  background: var(--bg-secondary);
+}
+.btn-control-library:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.library-io__sep {
+  width: 1px;
+  height: 24px;
+  background: var(--border-default);
+}
+
+.library-io__status {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+.library-io__status--error {
+  color: var(--status-error);
+}
+
+@media (max-width: 768px) {
+  .library-io {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .library-io__select,
+  .btn-control-library {
+    width: 100%;
+    max-width: none;
+    justify-content: center;
+  }
+  .library-io__sep {
+    display: none;
+  }
+}
