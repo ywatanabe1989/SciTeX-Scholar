@@ -250,11 +250,29 @@ API infrastructure.
                             </div>
                             <div class="graph-card__body">
                                 <p class="graph-description">
-                                    Your papers, stored locally. Select a paper and use
-                                    <strong>Enrich</strong> to fill in metadata
-                                    (abstract, citations, impact factor) from the
-                                    databases.
+                                    Your papers, stored locally. Use <strong>Enrich</strong>
+                                    to fill in metadata (abstract, citations, impact
+                                    factor) from the databases, or
+                                    <strong>Import</strong> BibTeX and
+                                    <strong>Export</strong> your library.
                                 </p>
+                                <!-- Import / Export (#106 / L327): library-level
+                                     operations, thin wrappers over the package's
+                                     BibTeX handler + formatter. -->
+                                <div class="library-io">
+                                    <label class="library-io__label" for="libraryExportFormat">Export</label>
+                                    <select id="libraryExportFormat" class="form-select library-io__select">
+                                        <option value="bibtex" selected>BibTeX (.bib)</option>
+                                        <option value="ris">RIS (.ris)</option>
+                                        <option value="endnote">EndNote (.enw)</option>
+                                    </select>
+                                    <button type="button" id="libraryExportBtn" class="btn-control-library">Export</button>
+                                    <span class="library-io__sep"></span>
+                                    <input type="file" id="libraryImportFile" class="library-io__file"
+                                           accept=".bib,.bibtex,.txt" hidden>
+                                    <button type="button" id="libraryImportBtn" class="btn-control-library">Import BibTeX</button>
+                                </div>
+                                <div id="libraryIoStatus" class="library-io__status"></div>
                                 <div id="libraryLoading" class="graph-loading hidden">
                                     <div class="loading-spinner">
                                         <div class="spinner-ring"></div>
